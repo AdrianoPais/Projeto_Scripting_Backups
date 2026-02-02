@@ -1,0 +1,55 @@
+#!/bin/bash
+
+# 1. Atualização do Sistema
+echo "A atualizar o sistema..."
+dnf update -y
+
+# 2. Configuração do RAID 10
+# Nota: Assume-se que os discos adicionais são /dev/sdb, /dev/sdc, /dev/sdd, /dev/sde
+echo "A configurar RAID 10 em /backup..."
+dnf install mdadm -y
+mdadm --create /dev/md0 --level=10 --raid-devices=4 /dev/sdb /dev/sdc /dev/sdd /dev/sde --run
+mkfs.xfs /dev/md0
+mkdir -p /backup
+mount /dev/md0 /backup
+echo '/dev/md0 /backup xfs defaults 0 0' >> /etc/fstab
+
+# 3. Instalação do Virtualmin (Apache, PHP 8+, MariaDB 10+ incluídos)
+echo "A instalar o Virtualmin..."
+wget https://software.virtualmin.com/gpl/scripts/virtualmin-install.sh
+sh virtualmin-install.sh --force --bundle LEMP # Ou LAMP conforme preferência
+
+# 4. Configuração do Fail2ban (Máximo 3 tentativas)
+echo "A configurar Fail2ban..."
+dnf install fail2ban -y
+cat <<EOF > /etc/fail2ban/jail.local
+[sshd]
+enabled = true
+maxretry = 3
+findtime = 600
+bantime = 3600
+
+[apache-auth]
+enabled = true
+maxretry = 3
+EOF
+systemctl enable --now fail2ban
+
+# 5. Tuning de Performance
+echo "A aplicar Tuning de performance..."
+# MariaDB Tuning
+sed -i '/\[mysqld\]/a innodb_buffer_pool_size = 512M\nmax_connections = 100' /etc/my.cnf.d/mariadb-server.cnf
+
+# PHP Tuning
+PHP_INI=$(php -i | grep "Loaded Configuration File" | awk '{print $NF}')
+sed -i 's/memory_limit = .*/memory_limit = 256M/' $PHP_INI
+sed -i 's/upload_max_filesize = .*/upload_max_filesize = 20M/' $PHP_INI
+
+# 6. Firewall - Abertura de Portas
+echo "A configurar a Firewall..."
+[cite_start]firewall-cmd --permanent --add-service=http [cite: 54]
+[cite_start]firewall-cmd --permanent --add-service=https [cite: 55]
+[cite_start]firewall-cmd --permanent --add-port=22/tcp [cite: 53]
+firewall-cmd --reload
+
+echo "Instalação concluída. Aceda ao Virtualmin via https://<IP_PUBLICO>:10000"
