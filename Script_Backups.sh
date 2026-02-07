@@ -40,7 +40,7 @@ configurar_rede_interativa() {
 
 configurar_rede_interativa
 
-# --- 2. DETEÇÃO E CRIAÇÃO DO RAID 10 [cite: 71-82] ---
+# --- 2. DETEÇÃO E CRIAÇÃO DO RAID 10 [: 71-82] ---
 echo -e "\n[INFO] A detetar discos para o RAID 10..."
 # Deteta discos extras (que não têm partições montadas)
 DISCOS_LIVRES=($(lsblk -dn -o NAME,TYPE,MOUNTPOINTS | grep "disk" | grep -v "/" | awk '{print "/dev/"$1}' | grep -v "nvme0n1" | head -n 4))
@@ -51,10 +51,10 @@ if [[ ${#DISCOS_LIVRES[@]} -lt 4 ]]; then
 fi
 
 echo "Discos selecionados para RAID: ${DISCOS_LIVRES[*]}"
-# Cria o RAID 10 [cite: 73, 74, 80]
+# Cria o RAID 10
 mdadm --create /dev/md0 --level=10 --raid-devices=4 "${DISCOS_LIVRES[@]}" --force
 
-# Formatação e Montagem Persistente [cite: 81-82]
+# Formatação e Montagem Persistente
 mkfs.xfs -f /dev/md0
 mkdir -p /backup
 mount /dev/md0 /backup
@@ -63,21 +63,21 @@ echo "UUID=$UUID_RAID /backup xfs defaults 0 0" >> /etc/fstab
 
 # --- 3. ESTRUTURA DE DIRETÓRIOS EXIGIDA  ---
 echo "[INFO] A criar estrutura de pastas em /backup..."
-mkdir -p /backup/web/incremental [cite: 86-87]
-mkdir -p /backup/db/incremental [cite: 88-89]
-mkdir -p /backup/logs [cite: 90]
+mkdir -p /backup/web/incremental [: 86-87]
+mkdir -p /backup/db/incremental [: 88-89]
+mkdir -p /backup/logs [: 90]
 mkdir -p /backup/restic /backup/backrest
 
-# --- 4. INSTALAÇÃO DE FERRAMENTAS E SEGURANÇA [cite: 16-26, 63] ---
+# --- 4. INSTALAÇÃO DE FERRAMENTAS E SEGURANÇA ---
 echo "[INFO] A instalar serviços..."
 dnf -y install epel-release
-dnf -y install restic podman firewalld cronie fail2ban rsync [cite: 16-26]
+dnf -y install restic podman firewalld cronie fail2ban rsync
 
 systemctl enable --now firewalld fail2ban
 firewall-cmd --permanent --add-port=8000/tcp
-firewall-cmd --reload [cite: 53, 54]
+firewall-cmd --reload [: 53, 54]
 
-# --- 5. INICIALIZAÇÃO DO RESTIC (BACKUP INCREMENTAL) [cite: 83, 93] ---
+# --- 5. INICIALIZAÇÃO DO RESTIC (BACKUP INCREMENTAL) ---
 echo "restic_atec_2026" > /backup/backrest/restic-pass
 chmod 600 /backup/backrest/restic-pass
 
@@ -85,7 +85,7 @@ if [[ ! -f "/backup/restic/config" ]]; then
     restic init --repo /backup/restic --password-file /backup/backrest/restic-pass
 fi
 
-# --- 6. AGENDAMENTO SEMANAL (DOMINGO ÀS 03:00) [cite: 100-104] ---
+# --- 6. AGENDAMENTO SEMANAL (DOMINGO ÀS 03:00) ---
 echo "[INFO] A configurar agendamento (Cron)..."
 (crontab -l 2>/dev/null; echo "0 3 * * 0 restic -r /backup/restic backup /var/www/html --password-file /backup/backrest/restic-pass >> /backup/logs/backup_semanal.log 2>&1") | crontab -
 
