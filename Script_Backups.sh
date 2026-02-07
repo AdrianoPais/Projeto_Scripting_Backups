@@ -63,9 +63,9 @@ echo "UUID=$UUID_RAID /backup xfs defaults 0 0" >> /etc/fstab
 
 # --- 3. ESTRUTURA DE DIRETÓRIOS EXIGIDA  ---
 echo "[INFO] A criar estrutura de pastas em /backup..."
-mkdir -p /backup/web/incremental [: 86-87]
-mkdir -p /backup/db/incremental [: 88-89]
-mkdir -p /backup/logs [: 90]
+mkdir -p /backup/web/incremental
+mkdir -p /backup/db/incremental
+mkdir -p /backup/logs
 mkdir -p /backup/restic /backup/backrest
 
 # --- 4. INSTALAÇÃO DE FERRAMENTAS E SEGURANÇA ---
@@ -75,7 +75,7 @@ dnf -y install restic podman firewalld cronie fail2ban rsync
 
 systemctl enable --now firewalld fail2ban
 firewall-cmd --permanent --add-port=8000/tcp
-firewall-cmd --reload [: 53, 54]
+firewall-cmd --reload
 
 # --- 5. INICIALIZAÇÃO DO RESTIC (BACKUP INCREMENTAL) ---
 echo "restic_atec_2026" > /backup/backrest/restic-pass
