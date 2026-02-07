@@ -65,12 +65,29 @@ configurar_rede_interativa() {
 # --- 1. EXECUTAR CONFIGURAÇÃO DE REDE ---
 configurar_rede_interativa
 
-# --- 2. CONFIGURAÇÃO DUCKDNS ---
+# --- CONFIGURAÇÃO DUCKDNS (AUTOMATIZADA) ---
 echo -e "\n[INFO] A configurar DuckDNS para acesso externo..."
 
-# Dados do utilizador
-read -p "Introduza o seu Token do DuckDNS: " DUCK_TOKEN
+# [cite_start]Definição de variáveis sem espaços 
+DUCK_TOKEN="4d97ee77-41b5-4f2d-a9e1-b305a7e9a61a"
 DUCK_DOMAIN="webserver-atec"
+
+# Criar o script de atualização no sistema
+cat > /usr/local/sbin/duckdns_update.sh <<EOF
+#!/bin/bash
+# [cite_start]Script de atualização automática de IP Público [cite: 46]
+echo url="https://www.duckdns.org/update?domains=${DUCK_DOMAIN}&token=${DUCK_TOKEN}&ip=" | curl -k -K -
+EOF
+
+# Definir permissões de execução e segurança
+chmod 700 /usr/local/sbin/duckdns_update.sh
+# Garantir que apenas o root pode ler o token
+chmod 600 /usr/local/sbin/duckdns_update.sh
+
+# Agendamento no Crontab (Execução a cada 5 minutos)
+(crontab -l 2>/dev/null; echo "*/5 * * * * /usr/local/sbin/duckdns_update.sh >/dev/null 2>&1") | crontab -
+
+echo "[OK] DuckDNS configurado para ${DUCK_DOMAIN}.duckdns.org."
 
 # Criar o script de atualização
 cat > /usr/local/sbin/duckdns_update.sh <<EOF
