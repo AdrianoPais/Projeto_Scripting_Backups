@@ -86,10 +86,12 @@ if [[ ! -f "/backup/restic/config" ]]; then
 fi
 
 # --- 6. AGENDAMENTO SEMANAL (DOMINGO ÀS 03:00) ---
+
 echo "[INFO] A configurar agendamento (Cron)..."
-(crontab -l 2>/dev/null; echo "0 3 * * 0 restic -r /backup/restic backup /var/www/html --password-file /backup/backrest/restic-pass >> /backup/logs/backup_semanal.log 2>&1") | crontab -
+(crontab -l 2>/dev/null || true; echo "0 3 * * 0 restic -r /backup/restic backup /var/www/html --password-file /backup/backrest/restic-pass >> /backup/logs/backup_semanal.log 2>&1") | crontab -
 
 # --- 7. INTERFACE GUI (BACKREST) ---
+
 podman run -d --name backrest --restart always -p 8000:9898 \
   -v /backup/backrest:/config:Z -v /backup/restic:/data/restic:Z \
   -e "RESTIC_PASSWORD_FILE=/config/restic-pass" \
