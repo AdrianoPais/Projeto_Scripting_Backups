@@ -6,6 +6,12 @@
 
 set -euo pipefail
 
+# --- 0. VERIFICAÇÃO DE ROOT (Deve ser a primeira coisa) ---
+if [[ "$(id -u)" -ne 0 ]]; then
+    echo "ERRO: Este script tem de ser corrido como root (sudo)."
+    exit 1
+fi
+
 # --- FUNÇÃO DE CONFIGURAÇÃO DE REDE ---
 configurar_rede_interativa() {
     clear
@@ -22,7 +28,7 @@ configurar_rede_interativa() {
     nmcli device status | grep -v "DEVICE"
     echo ""
 
-    read -p "Nome da interface a configurar (ex: enp0s3): " IFACE
+    read -p "Nome da interface a configurar (ex: ens33): " IFACE
     read -p "Endereço IP (ex: 192.168.1.100/24): " IP_ADDR
     read -p "Gateway (IP do Router): " GATEWAY
     read -p "DNS Primário (ex: 1.1.1.1): " DNS1
@@ -56,11 +62,14 @@ configurar_rede_interativa() {
     echo "[OK] Rede configurada."
 }
 
-# --- CONFIGURAÇÃO DUCKDNS ---
+# --- 1. EXECUTAR CONFIGURAÇÃO DE REDE ---
+configurar_rede_interativa
+
+# --- 2. CONFIGURAÇÃO DUCKDNS ---
 echo -e "\n[INFO] A configurar DuckDNS para acesso externo..."
 
-# Dados do utilizador (Podes automatizar se já tiveres o token)
-read -p "Introduza o seu Token do DuckDNS (Exemplo: 4d97ee77-41b5-4f2d-a9e1-b305a7e9a61a): " DUCK_TOKEN
+# Dados do utilizador
+read -p "Introduza o seu Token do DuckDNS: " DUCK_TOKEN
 DUCK_DOMAIN="webserver-atec"
 
 # Criar o script de atualização
@@ -74,34 +83,24 @@ chmod +x /usr/local/sbin/duckdns_update.sh
 # Adicionar ao crontab para atualizar a cada 5 minutos
 (crontab -l 2>/dev/null; echo "*/5 * * * * /usr/local/sbin/duckdns_update.sh >/dev/null 2>&1") | crontab -
 
-echo "DuckDNS configurado. O domínio ${DUCK_DOMAIN}.duckdns.org será atualizado automaticamente."
+echo "[OK] DuckDNS configurado. O domínio ${DUCK_DOMAIN}.duckdns.org será atualizado automaticamente."
 
-# --- VERIFICAÇÃO DE ROOT ---
-if [[ "$(id -u)" -ne 0 ]]; then
-    echo "ERRO: Este script tem de ser corrido como root (sudo)."
-    exit 1
-fi
-
-# 1. EXECUTAR CONFIGURAÇÃO DE REDE
-configurar_rede_interativa
-
-# 2. INSTALAÇÃO DE SERVIÇOS (LAMP)
+# --- 3. INSTALAÇÃO DE SERVIÇOS (LAMP) ---
 echo -e "\n[INFO] A instalar Apache, PHP e MariaDB..."
 dnf -y update
 dnf -y install httpd php php-mysqlnd mariadb-server firewalld rsync
 
-# 3. CONFIGURAÇÃO FIREWALL (DMZ)
+# --- 4. CONFIGURAÇÃO FIREWALL (DMZ) ---
 echo "[INFO] A configurar Firewall..."
 systemctl enable --now firewalld
 firewall-cmd --permanent --add-service={http,https,ssh}
 firewall-cmd --reload
 
-# 4. IMPLEMENTAÇÃO DO SITE CYBERPUNK
+# --- 5. IMPLEMENTAÇÃO DO SITE CYBERPUNK ---
 echo "[INFO] A criar interface ATEC SYSTEM_CORE..."
 WEBROOT="/var/www/html"
 mkdir -p "$WEBROOT"
 
-# O uso de 'HTML' (com plicas) impede que o bash tente interpretar o CSS
 cat > "${WEBROOT}/index.html" <<'HTML'
 <!DOCTYPE html>
 <html lang="pt-pt">
@@ -367,13 +366,16 @@ HTML
 chown -R apache:apache "${WEBROOT}"
 restorecon -Rv "${WEBROOT}"
 
-# 5. ATIVAR SERVIÇOS E HARDENING
+# --- 6. ATIVAR SERVIÇOS E HARDENING (MARIADB) ---
 echo "[INFO] A iniciar serviços e aplicar hardening total do MariaDB..."
 systemctl enable --now httpd
 systemctl enable --now mariadb
 
-# Definir uma variável para a password (podes transformar isto num 'read -s' se preferires)
-read -s DB_ROOT_PASSWORD "Introduz a password do root do MariaDB: "
+# CORREÇÃO: Sintaxe correta do 'read'
+echo ""
+echo "!!! ATENÇÃO: A próxima password será definida como ROOT da base de dados !!!"
+read -s -p "Introduz a password para o root do MariaDB: " DB_ROOT_PASSWORD
+echo ""
 
 # Execução do Hardening Completo
 mysql -u root <<SQL
@@ -383,7 +385,7 @@ ALTER USER 'root'@'localhost' IDENTIFIED BY '${DB_ROOT_PASSWORD}';
 -- 2. Remover utilizadores anónimos
 DELETE FROM mysql.user WHERE User='';
 
--- 3. Desativar login remoto do root (remover root que não seja de localhost)
+-- 3. Desativar login remoto do root
 DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1');
 
 -- 4. Remover base de dados de teste
@@ -394,9 +396,10 @@ DELETE FROM mysql.db WHERE Db='test' OR Db='test\\_%';
 FLUSH PRIVILEGES;
 SQL
 
-ok "MariaDB configurado de acordo com os requisitos de segurança do projeto."
+# CORREÇÃO: 'ok' substituído por 'echo'
+echo "[OK] MariaDB configurado de acordo com os requisitos de segurança."
 
-# 6. RESUMO FINAL
+# --- 7. RESUMO FINAL ---
 IP_FINAL=$(hostname -I | awk '{print $1}')
 echo ""
 echo "============================================================"
