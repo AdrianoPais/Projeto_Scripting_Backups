@@ -28,7 +28,7 @@ configurar_rede_interativa() {
     nmcli device status | grep -v "DEVICE"
     echo ""
 
-    read -p "Nome da interface a configurar (ex: ens33): " IFACE
+    read -p "Nome da interface a configurar (ex: enp0s3): " IFACE
     read -p "Endereço IP (ex: 192.168.1.100/24): " IP_ADDR
     read -p "Gateway (IP do Router): " GATEWAY
     read -p "DNS Primário (ex: 1.1.1.1): " DNS1
