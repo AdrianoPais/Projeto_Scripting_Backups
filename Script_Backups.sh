@@ -1,117 +1,111 @@
 #!/bin/bash
 # ============================================================
-#   WEB SERVER (DMZ) - ATEC SYSTEM_CORE_2026
-#   Configuração: IP Fixo + DuckDNS + LAMP + Cyberpunk UI
+#   ATEC // SYSTEM_CORE_2026 - BACKUP SERVER
+#   Configuração: IP Fixo + RAID 10 + Restic + Estrutura PDF
 # ============================================================
 
 set -euo pipefail
 
-# --- 0. VERIFICAÇÃO DE ROOT (Essencial para configurar rede) ---
-if [[ "$(id -u)" -ne 0 ]]; then
-    echo "ERRO: Este script tem de ser corrido como root (sudo)."
-    exit 1
-fi
+# --- 0. VERIFICAÇÃO DE ROOT ---
+if [[ "$(id -u)" -ne 0 ]]; then echo "ERRO: Corre como root."; exit 1; fi
 
-# [cite_start]--- FUNÇÃO DE CONFIGURAÇÃO DE REDE (IP FIXO) [cite: 15, 46] ---
+# --- 1. FUNÇÃO DE CONFIGURAÇÃO DE REDE (IP FIXO) ---
 configurar_rede_interativa() {
     clear
     echo "============================================================"
     echo "   ATEC // SYSTEM_CORE_2026 - CONFIGURAÇÃO DE REDE"
     echo "============================================================"
     
-    # Hostname
-    read -p "Definir Hostname (Enter para 'webserver-atec'): " HOSTNAME_INPUT
-    HOSTNAME_NEW="${HOSTNAME_INPUT:-webserver-atec}"
+    read -p "Definir Hostname (Enter para 'backup-srv'): " HOSTNAME_INPUT
+    HOSTNAME_NEW="${HOSTNAME_INPUT:-backup-srv}"
     hostnamectl set-hostname "$HOSTNAME_NEW"
     
-    # Listar interfaces para o utilizador ver
     echo -e "\n[INFO] Interfaces detetadas:"
     nmcli device status | grep -v "DEVICE"
     echo ""
 
     read -p "Nome da interface (ex: enp0s3): " IFACE
-    read -p "Endereço IP/Máscara (ex: 192.168.1.100/24): " IP_ADDR
+    read -p "Endereço IP/Máscara (ex: 192.168.1.200/24): " IP_ADDR
     read -p "Gateway (IP do Router): " GATEWAY
     read -p "DNS Primário (ex: 8.8.8.8): " DNS1
     
-    echo -e "\n[INFO] A aplicar IP Fixo na interface $IFACE..."
-    
-    # Configuração via nmcli para IP Manual
     nmcli con mod "$IFACE" ipv4.method manual ipv4.addresses "$IP_ADDR" ipv4.gateway "$GATEWAY" ipv4.dns "$DNS1" ipv6.method ignore 2>/dev/null || \
     nmcli con mod "Wired connection 1" ipv4.method manual ipv4.addresses "$IP_ADDR" ipv4.gateway "$GATEWAY" ipv4.dns "$DNS1" ipv6.method ignore
 
-    # Reiniciar a ligação para aplicar
     nmcli con down "$IFACE" 2>/dev/null || true
     nmcli con up "$IFACE" 2>/dev/null || nmcli con up "Wired connection 1"
     
     echo "[OK] Rede configurada com IP Fixo."
 }
 
-# 1. EXECUTAR REDE
+# Executar configuração de rede logo no início
 configurar_rede_interativa
 
-# [cite_start]--- 2. CONFIGURAÇÃO DUCKDNS [cite: 51] ---
-echo -e "\n[INFO] A configurar DuckDNS para acesso externo..."
-read -p "Introduza o seu Token do DuckDNS: " DUCK_TOKEN
-DUCK_DOMAIN="webserver-atec"
+echo -e "\n[INFO] A iniciar configuração técnica do servidor..."
 
-cat > /usr/local/sbin/duckdns_update.sh <<EOF
-#!/bin/bash
-echo url="https://www.duckdns.org/update?domains=${DUCK_DOMAIN}&token=${DUCK_TOKEN}&ip=" | curl -k -K -
-EOF
+# [cite_start]--- 2. CONFIGURAÇÃO DO RAID 10 [cite: 71-82] ---
+[cite_start]echo "[INFO] A configurar RAID 10 (Mínimo 4 discos)..." [cite: 74]
+# Ajusta os nomes dos discos (sdb, sdc, etc.) conforme o teu 'lsblk'
+DISCOS_RAID=("/dev/sdb" "/dev/sdc" "/dev/sdd" "/dev/sde")
 
-chmod +x /usr/local/sbin/duckdns_update.sh
-(crontab -l 2>/dev/null; echo "*/5 * * * * /usr/local/sbin/duckdns_update.sh >/dev/null 2>&1") | crontab -
-echo "[OK] DuckDNS agendado (5 em 5 min)."
+# [cite_start]Criar o array RAID 10 [cite: 80]
+mdadm --create /dev/md0 --level=10 --raid-devices=4 "${DISCOS_RAID[@]}" --force
 
-# [cite_start]--- 3. INSTALAÇÃO DE SERVIÇOS (LAMP) [cite: 17, 18, 19, 29, 33, 36] ---
-echo -e "\n[INFO] A instalar Apache, PHP e MariaDB..."
-dnf -y update
-dnf -y install httpd php php-mysqlnd mariadb-server firewalld rsync
+# [cite_start]Formatação e Montagem em /backup [cite: 81-82]
+mkfs.xfs -f /dev/md0
+mkdir -p /backup
+mount /dev/md0 /backup
 
-# [cite_start]--- 4. CONFIGURAÇÃO FIREWALL (DMZ) [cite: 11, 54-58] ---
-echo "[INFO] A configurar Firewall..."
+# [cite_start]Garantir Montagem Permanente (fstab) [cite: 82]
+UUID_RAID=$(blkid -s UUID -o value /dev/md0)
+if ! grep -q "$UUID_RAID" /etc/fstab; then
+    echo "UUID=$UUID_RAID /backup xfs defaults 0 0" >> /etc/fstab
+fi
+
+# [cite_start]--- 3. ESTRUTURA DE DIRETÓRIOS EXIGIDA  ---
+echo "[INFO] A criar estrutura de pastas do PDF..."
+[cite_start]mkdir -p /backup/web/incremental [cite: 86-87]
+[cite_start]mkdir -p /backup/db/incremental [cite: 88-89]
+[cite_start]mkdir -p /backup/logs [cite: 90]
+mkdir -p /backup/restic /backup/backrest
+
+# [cite_start]--- 4. INSTALAÇÃO DE FERRAMENTAS E SEGURANÇA [cite: 16-26, 63] ---
+echo "[INFO] A instalar serviços..."
+dnf -y install epel-release
+[cite_start]dnf -y install restic podman firewalld cronie fail2ban rsync [cite: 26]
+
+# [cite_start]Firewall [cite: 53-59]
 systemctl enable --now firewalld
-firewall-cmd --permanent --add-service={http,https,ssh}
+firewall-cmd --permanent --add-port=8000/tcp
 firewall-cmd --reload
 
-# [cite_start]--- 5. IMPLEMENTAÇÃO DO SITE CYBERPUNK  ---
-WEBROOT="/var/www/html"
-mkdir -p "$WEBROOT"
-cat > "${WEBROOT}/index.html" <<'HTML'
-<!DOCTYPE html>
-<html lang="pt-pt">
-<head>
-    <meta charset="UTF-8">
-    <title>ATEC // SYSTEM_CORE_2026</title>
-    </head>
-<body>
-    <h1>SISTEMA ONLINE</h1>
-</body>
-</html>
-HTML
+# [cite_start]Fail2ban [cite: 63-66]
+systemctl enable --now fail2ban
 
-chown -R apache:apache "${WEBROOT}"
-[cite_start]restorecon -Rv "${WEBROOT}" [cite: 61]
+# [cite_start]--- 5. INICIALIZAÇÃO DO RESTIC (BACKUP INCREMENTAL) [cite: 83, 93] ---
+echo "minha_password_forte" > /backup/backrest/restic-pass
+chmod 600 /backup/backrest/restic-pass
 
-# [cite_start]--- 6. HARDENING MARIADB [cite: 39-44] ---
-echo "[INFO] A aplicar hardening do MariaDB..."
-systemctl enable --now mariadb
-read -s -p "Define a nova password root do MariaDB: " DB_ROOT_PASSWORD
-echo ""
+if [[ ! -f "/backup/restic/config" ]]; then
+    restic init --repo /backup/restic --password-file /backup/backrest/restic-pass
+fi
 
-mysql -u root <<SQL
-ALTER USER 'root'@'localhost' IDENTIFIED BY '${DB_ROOT_PASSWORD}';
-DELETE FROM mysql.user WHERE User='';
-DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1');
-DROP DATABASE IF EXISTS test;
-FLUSH PRIVILEGES;
-SQL
+# [cite_start]--- 6. AGENDAMENTO SEMANAL (DOMINGO) [cite: 101-103] ---
+[cite_start]echo "[INFO] A configurar agendamento semanal (Cron)..." [cite: 102]
+# [cite_start]Adiciona tarefa para correr todos os domingos às 03:00 
+(crontab -l 2>/dev/null; echo "0 3 * * 0 restic -r /backup/restic backup /var/www/html --password-file /backup/backrest/restic-pass >> /backup/logs/backup_semanal.log 2>&1") | crontab -
 
-# --- 7. FINALIZAÇÃO ---
-systemctl enable --now httpd
+# --- 7. INTERFACE GUI (BACKREST) ---
+podman run -d --name backrest --restart always -p 8000:9898 \
+  -v /backup/backrest:/config:Z \
+  -v /backup/restic:/data/restic:Z \
+  -e "RESTIC_PASSWORD_FILE=/config/restic-pass" \
+  docker.io/garethgeorge/backrest:latest
+
 echo "============================================================"
-echo "   CONFIGURAÇÃO CONCLUÍDA"
-echo "   Website: http://${DUCK_DOMAIN}.duckdns.org"
-echo "   IP Local: $(hostname -I | awk '{print $1}')"
+echo " SERVIDOR DE BACKUPS PRONTO E EM CONFORMIDADE COM O PDF"
+echo " IP CONFIGURADO: $(hostname -I | awk '{print $1}')"
+[cite_start]echo " RAID 10: Ativo em /backup [cite: 135]"
+[cite_start]echo " AGENDAMENTO: Domingos às 03:00 [cite: 103, 136]"
+echo " GUI: http://$(hostname -I | awk '{print $1}'):8000"
 echo "============================================================"
