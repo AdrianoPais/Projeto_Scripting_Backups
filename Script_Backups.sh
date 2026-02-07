@@ -43,46 +43,46 @@ configurar_rede_interativa
 
 echo -e "\n[INFO] A iniciar configuração técnica do servidor..."
 
-# [cite_start]--- 2. CONFIGURAÇÃO DO RAID 10 [cite: 71-82] ---
-[cite_start]echo "[INFO] A configurar RAID 10 (Mínimo 4 discos)..." [cite: 74]
+# --- 2. CONFIGURAÇÃO DO RAID 10 [cite: 71-82] ---
+echo "[INFO] A configurar RAID 10 (Mínimo 4 discos)..." [cite: 74]
 # Ajusta os nomes dos discos (sdb, sdc, etc.) conforme o teu 'lsblk'
 DISCOS_RAID=("/dev/sdb" "/dev/sdc" "/dev/sdd" "/dev/sde")
 
-# [cite_start]Criar o array RAID 10 [cite: 80]
+# Criar o array RAID 10 [cite: 80]
 mdadm --create /dev/md0 --level=10 --raid-devices=4 "${DISCOS_RAID[@]}" --force
 
-# [cite_start]Formatação e Montagem em /backup [cite: 81-82]
+# Formatação e Montagem em /backup [cite: 81-82]
 mkfs.xfs -f /dev/md0
 mkdir -p /backup
 mount /dev/md0 /backup
 
-# [cite_start]Garantir Montagem Permanente (fstab) [cite: 82]
+# Garantir Montagem Permanente (fstab) [cite: 82]
 UUID_RAID=$(blkid -s UUID -o value /dev/md0)
 if ! grep -q "$UUID_RAID" /etc/fstab; then
     echo "UUID=$UUID_RAID /backup xfs defaults 0 0" >> /etc/fstab
 fi
 
-# [cite_start]--- 3. ESTRUTURA DE DIRETÓRIOS EXIGIDA  ---
+# --- 3. ESTRUTURA DE DIRETÓRIOS EXIGIDA  ---
 echo "[INFO] A criar estrutura de pastas do PDF..."
-[cite_start]mkdir -p /backup/web/incremental [cite: 86-87]
-[cite_start]mkdir -p /backup/db/incremental [cite: 88-89]
-[cite_start]mkdir -p /backup/logs [cite: 90]
+mkdir -p /backup/web/incremental [cite: 86-87]
+mkdir -p /backup/db/incremental [cite: 88-89]
+mkdir -p /backup/logs [cite: 90]
 mkdir -p /backup/restic /backup/backrest
 
-# [cite_start]--- 4. INSTALAÇÃO DE FERRAMENTAS E SEGURANÇA [cite: 16-26, 63] ---
+# --- 4. INSTALAÇÃO DE FERRAMENTAS E SEGURANÇA [cite: 16-26, 63] ---
 echo "[INFO] A instalar serviços..."
 dnf -y install epel-release
-[cite_start]dnf -y install restic podman firewalld cronie fail2ban rsync [cite: 26]
+dnf -y install restic podman firewalld cronie fail2ban rsync [cite: 26]
 
-# [cite_start]Firewall [cite: 53-59]
+# Firewall [cite: 53-59]
 systemctl enable --now firewalld
 firewall-cmd --permanent --add-port=8000/tcp
 firewall-cmd --reload
 
-# [cite_start]Fail2ban [cite: 63-66]
+# Fail2ban [cite: 63-66]
 systemctl enable --now fail2ban
 
-# [cite_start]--- 5. INICIALIZAÇÃO DO RESTIC (BACKUP INCREMENTAL) [cite: 83, 93] ---
+# --- 5. INICIALIZAÇÃO DO RESTIC (BACKUP INCREMENTAL) [cite: 83, 93] ---
 echo "minha_password_forte" > /backup/backrest/restic-pass
 chmod 600 /backup/backrest/restic-pass
 
@@ -90,9 +90,9 @@ if [[ ! -f "/backup/restic/config" ]]; then
     restic init --repo /backup/restic --password-file /backup/backrest/restic-pass
 fi
 
-# [cite_start]--- 6. AGENDAMENTO SEMANAL (DOMINGO) [cite: 101-103] ---
-[cite_start]echo "[INFO] A configurar agendamento semanal (Cron)..." [cite: 102]
-# [cite_start]Adiciona tarefa para correr todos os domingos às 03:00 
+# --- 6. AGENDAMENTO SEMANAL (DOMINGO) [cite: 101-103] ---
+echo "[INFO] A configurar agendamento semanal (Cron)..." [cite: 102]
+# Adiciona tarefa para correr todos os domingos às 03:00 
 (crontab -l 2>/dev/null; echo "0 3 * * 0 restic -r /backup/restic backup /var/www/html --password-file /backup/backrest/restic-pass >> /backup/logs/backup_semanal.log 2>&1") | crontab -
 
 # --- 7. INTERFACE GUI (BACKREST) ---
@@ -105,7 +105,7 @@ podman run -d --name backrest --restart always -p 8000:9898 \
 echo "============================================================"
 echo " SERVIDOR DE BACKUPS PRONTO E EM CONFORMIDADE COM O PDF"
 echo " IP CONFIGURADO: $(hostname -I | awk '{print $1}')"
-[cite_start]echo " RAID 10: Ativo em /backup [cite: 135]"
-[cite_start]echo " AGENDAMENTO: Domingos às 03:00 [cite: 103, 136]"
+echo " RAID 10: Ativo em /backup [cite: 135]"
+echo " AGENDAMENTO: Domingos às 03:00 [cite: 103, 136]"
 echo " GUI: http://$(hostname -I | awk '{print $1}'):8000"
 echo "============================================================"
