@@ -74,7 +74,7 @@ chmod +x /usr/local/sbin/duckdns_update.sh
 # Adicionar ao crontab para atualizar a cada 5 minutos
 (crontab -l 2>/dev/null; echo "*/5 * * * * /usr/local/sbin/duckdns_update.sh >/dev/null 2>&1") | crontab -
 
-ok "DuckDNS configurado. O domínio ${DUCK_DOMAIN}.duckdns.org será atualizado automaticamente."
+echo "DuckDNS configurado. O domínio ${DUCK_DOMAIN}.duckdns.org será atualizado automaticamente."
 
 # --- VERIFICAÇÃO DE ROOT ---
 if [[ "$(id -u)" -ne 0 ]]; then
