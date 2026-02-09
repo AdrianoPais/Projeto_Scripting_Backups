@@ -75,7 +75,7 @@ DUCK_DOMAIN="webserver-atec"
 # Criar o script de atualização no sistema
 cat > /usr/local/sbin/duckdns_update.sh <<EOF
 #!/bin/bash
-# [cite_start]Script de atualização automática de IP Público [cite: 46]
+# Script de atualização automática de IP Público
 echo url="https://www.duckdns.org/update?domains=${DUCK_DOMAIN}&token=${DUCK_TOKEN}&ip=" | curl -k -K -
 EOF
 
