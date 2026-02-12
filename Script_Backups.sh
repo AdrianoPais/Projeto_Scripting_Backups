@@ -2,7 +2,7 @@
 # ============================================================
 #   ATEC // SYSTEM_CORE_2026 - BACKUP SERVER MASTER SCRIPT
 #   Configuração: IP Fixo + RAID 10 + Restic + Disaster Recovery
-#   VERSÃO CORRIGIDA: Exclusão do disco de sistema (sda)
+#   VERSÃO: Compatível com NVMe
 # ============================================================
 
 set -euo pipefail
@@ -47,25 +47,25 @@ configurar_rede_interativa() {
 
 configurar_rede_interativa
 
-# --- 2. DETEÇÃO E CRIAÇÃO DO RAID 10 (CORRIGIDO) ---
+# --- 2. DETEÇÃO E CRIAÇÃO DO RAID 10 (CORRIGIDO PARA NVME) ---
 echo -e "\n[INFO] A instalar ferramentas de disco..."
 dnf install -y mdadm xfsprogs
 
 echo -e "\n[INFO] A detetar discos para o RAID 10..."
 
-# CORREÇÃO: Filtra discos que não sejam sda (sistema) e que não tenham partições montadas
-# Assume que os discos de dados são sd* (sdb, sdc, sdd, sde, etc)
-DISCOS_LIVRES=($(lsblk -dn -o NAME | grep -v "sda" | grep "^sd" | head -n 4 | awk '{print "/dev/"$1}'))
+# CORREÇÃO: Filtra discos NVMe e exclui o nvme0n1 (sistema)
+DISCOS_LIVRES=($(lsblk -dn -o NAME | grep "nvme" | grep -v "nvme0n1" | head -n 4 | awk '{print "/dev/"$1}' || true))
 
 if [[ ${#DISCOS_LIVRES[@]} -lt 4 ]]; then
-    echo "ERRO: Não encontrei 4 discos livres para o RAID. Encontrados: ${DISCOS_LIVRES[*]}"
-    echo "Verifica se os discos sdb, sdc, sdd e sde estão ligados."
+    echo "ERRO: Não encontrei 4 discos livres para o RAID."
+    echo "Discos encontrados: ${DISCOS_LIVRES[*]}"
+    echo "Esperado: nvme0n2, nvme0n3, nvme0n4, nvme0n5"
     exit 1
 fi
 
 echo "Discos selecionados para RAID: ${DISCOS_LIVRES[*]}"
 
-# SEGURANÇA: Parar raids antigos e limpar metadados para evitar erros
+# SEGURANÇA: Parar raids antigos e limpar metadados
 mdadm --stop /dev/md0 2>/dev/null || true
 mdadm --zero-superblock "${DISCOS_LIVRES[@]}" 2>/dev/null || true
 
@@ -77,7 +77,7 @@ mkfs.xfs -f /dev/md0
 mkdir -p /backup
 mount /dev/md0 /backup
 
-# Persistência no fstab (remove entradas antigas duplicadas do md0 se existirem)
+# Persistência no fstab
 sed -i '/\/dev\/md0/d' /etc/fstab
 UUID_RAID=$(blkid -s UUID -o value /dev/md0)
 echo "UUID=$UUID_RAID /backup xfs defaults 0 0" >> /etc/fstab
@@ -129,7 +129,7 @@ echo "--- Restauro Finalizado ---"
 EOF
 chmod +x /usr/local/bin/restauro_dr
 
-# --- 7. ARRANQUE DO CONTENTOR (CONFIGURAÇÃO OTIMIZADA) ---
+# --- 7. ARRANQUE DO CONTENTOR ---
 podman stop backrest || true && podman rm backrest || true
 podman run -d --name backrest --restart always -p 8000:9898 \
   -v /backup/backrest:/config:Z \
