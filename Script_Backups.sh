@@ -2,6 +2,7 @@
 # ============================================================
 #   ATEC // SYSTEM_CORE_2026 - BACKUP SERVER MASTER SCRIPT
 #   Configuração: IP Fixo + RAID 10 + Restic + Disaster Recovery
+#   VERSÃO CORRIGIDA: Exclusão do disco de sistema (sda)
 # ============================================================
 
 set -euo pipefail
@@ -25,6 +26,12 @@ configurar_rede_interativa() {
     echo ""
 
     read -p "Nome da interface (ex: enp0s3): " IFACE
+    # Se não for introduzido nada, tenta detetar a primeira interface ativa
+    if [[ -z "$IFACE" ]]; then
+        IFACE=$(nmcli device status | grep "ethernet" | head -n 1 | awk '{print $1}')
+        echo "Interface selecionada automaticamente: $IFACE"
+    fi
+
     read -p "IP/Máscara (ex: 192.168.1.200/24): " IP_ADDR
     read -p "Gateway (IP do Router): " GATEWAY
     read -p "DNS Primário (ex: 8.8.8.8): " DNS1
@@ -40,21 +47,38 @@ configurar_rede_interativa() {
 
 configurar_rede_interativa
 
-# --- 2. DETEÇÃO E CRIAÇÃO DO RAID 10 ---
+# --- 2. DETEÇÃO E CRIAÇÃO DO RAID 10 (CORRIGIDO) ---
+echo -e "\n[INFO] A instalar ferramentas de disco..."
+dnf install -y mdadm xfsprogs
+
 echo -e "\n[INFO] A detetar discos para o RAID 10..."
-DISCOS_LIVRES=($(lsblk -dn -o NAME,TYPE,MOUNTPOINTS | grep "disk" | grep -v "/" | awk '{print "/dev/"$1}' | grep -v "nvme0n1" | head -n 4))
+
+# CORREÇÃO: Filtra discos que não sejam sda (sistema) e que não tenham partições montadas
+# Assume que os discos de dados são sd* (sdb, sdc, sdd, sde, etc)
+DISCOS_LIVRES=($(lsblk -dn -o NAME | grep -v "sda" | grep "^sd" | head -n 4 | awk '{print "/dev/"$1}'))
 
 if [[ ${#DISCOS_LIVRES[@]} -lt 4 ]]; then
     echo "ERRO: Não encontrei 4 discos livres para o RAID. Encontrados: ${DISCOS_LIVRES[*]}"
+    echo "Verifica se os discos sdb, sdc, sdd e sde estão ligados."
     exit 1
 fi
 
 echo "Discos selecionados para RAID: ${DISCOS_LIVRES[*]}"
+
+# SEGURANÇA: Parar raids antigos e limpar metadados para evitar erros
+mdadm --stop /dev/md0 2>/dev/null || true
+mdadm --zero-superblock "${DISCOS_LIVRES[@]}" 2>/dev/null || true
+
+# Criação do RAID
 mdadm --create /dev/md0 --level=10 --raid-devices=4 "${DISCOS_LIVRES[@]}" --force
 
+# Formatação e Montagem
 mkfs.xfs -f /dev/md0
 mkdir -p /backup
 mount /dev/md0 /backup
+
+# Persistência no fstab (remove entradas antigas duplicadas do md0 se existirem)
+sed -i '/\/dev\/md0/d' /etc/fstab
 UUID_RAID=$(blkid -s UUID -o value /dev/md0)
 echo "UUID=$UUID_RAID /backup xfs defaults 0 0" >> /etc/fstab
 
@@ -63,7 +87,7 @@ echo "[INFO] A criar estrutura de pastas..."
 mkdir -p /backup/web/incremental /backup/db/incremental /backup/logs
 mkdir -p /backup/restic /backup/backrest /backup/ssh_keys /mnt/webserver_db
 
-# --- 4. INSTALAÇÃO DE FERRAMENTAS ---
+# --- 4. INSTALAÇÃO DE SERVIÇOS ---
 echo "[INFO] A instalar serviços..."
 dnf -y install epel-release
 dnf -y install restic podman firewalld cronie fail2ban rsync fuse-sshfs
@@ -81,7 +105,6 @@ if [[ ! -f "/backup/restic/config" ]]; then
 fi
 
 # --- 6. CRIAÇÃO DO SCRIPT DE RESTAURO (DISASTER RECOVERY) ---
-# Este script resolve os erros de diretoria inexistente automaticamente
 cat << 'EOF' > /usr/local/bin/restauro_dr
 #!/bin/bash
 REPO="/data/restic"
@@ -95,16 +118,18 @@ mkdir -p $STAGING
 sudo podman exec backrest restic -r $REPO restore latest --target /config/RESTAURO_AUTO
 
 echo "Repondo ficheiro no Web Server..."
-# Garante que a pasta existe no destino antes de enviar
 ssh -i $SSH_KEY root@$WEB_SERVER "mkdir -p /backup_db"
 FICHEIRO=$(find $STAGING -name "*.sql.gz" | head -n 1)
-scp -i $SSH_KEY $FICHEIRO root@$WEB_SERVER:/backup_db/db_backup_recuperado.sql.gz
+if [[ -n "$FICHEIRO" ]]; then
+    scp -i $SSH_KEY $FICHEIRO root@$WEB_SERVER:/backup_db/db_backup_recuperado.sql.gz
+else
+    echo "ERRO: Nenhum ficheiro SQL encontrado no backup."
+fi
 echo "--- Restauro Finalizado ---"
 EOF
 chmod +x /usr/local/bin/restauro_dr
 
 # --- 7. ARRANQUE DO CONTENTOR (CONFIGURAÇÃO OTIMIZADA) ---
-# Adicionados volumes para chaves SSH e permissão de escrita (:rw)
 podman stop backrest || true && podman rm backrest || true
 podman run -d --name backrest --restart always -p 8000:9898 \
   -v /backup/backrest:/config:Z \
@@ -117,8 +142,6 @@ podman run -d --name backrest --restart always -p 8000:9898 \
 
 echo "============================================================"
 echo " SERVIDOR DE BACKUPS CONFIGURADO COM SUCESSO"
-echo " RAID 10: Ativo em /backup"
+echo " RAID 10: Ativo em /backup (Discos: ${DISCOS_LIVRES[*]})"
 echo " SCRIPT DE EMERGÊNCIA: restauro_dr"
-echo " NOTA: Verifica a 'Retention Policy' na GUI para não apagar"
-echo " snapshots indesejados (Forget policy)."
 echo "============================================================"
