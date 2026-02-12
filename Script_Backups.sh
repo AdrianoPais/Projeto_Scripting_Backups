@@ -1,6 +1,6 @@
 #!/bin/bash
 # ============================================================
-#   ATEC // SYSTEM_CORE_2026 - BACKUP SERVER FINAL (V2)
+#   ATEC // SYSTEM_CORE_2026 - BACKUP SERVER MASTER SCRIPT
 #   Configuração: IP Fixo + RAID 10 + Restic + Disaster Recovery
 # ============================================================
 
@@ -58,11 +58,9 @@ mount /dev/md0 /backup
 UUID_RAID=$(blkid -s UUID -o value /dev/md0)
 echo "UUID=$UUID_RAID /backup xfs defaults 0 0" >> /etc/fstab
 
-# --- 3. ESTRUTURA DE DIRETÓRIOS EXIGIDA ---
-echo "[INFO] A criar estrutura de pastas e chaves..."
-mkdir -p /backup/web/incremental
-mkdir -p /backup/db/incremental
-mkdir -p /backup/logs
+# --- 3. ESTRUTURA DE DIRETÓRIOS E SEGURANÇA ---
+echo "[INFO] A criar estrutura de pastas..."
+mkdir -p /backup/web/incremental /backup/db/incremental /backup/logs
 mkdir -p /backup/restic /backup/backrest /backup/ssh_keys /mnt/webserver_db
 
 # --- 4. INSTALAÇÃO DE FERRAMENTAS ---
@@ -82,42 +80,32 @@ if [[ ! -f "/backup/restic/config" ]]; then
     restic init --repo /backup/restic --password-file /backup/backrest/restic-pass
 fi
 
-# --- 6. AGENDAMENTO CRON ---
-echo "[INFO] A configurar agendamento..."
-(crontab -l 2>/dev/null || true; echo "0 3 * * 0 restic -r /backup/restic backup /var/www/html --password-file /backup/backrest/restic-pass >> /backup/logs/backup_semanal.log 2>&1") | crontab -
-
-# --- 7. CRIAÇÃO DO SCRIPT DE DISASTER RECOVERY ---
+# --- 6. CRIAÇÃO DO SCRIPT DE RESTAURO (DISASTER RECOVERY) ---
+# Este script resolve os erros de diretoria inexistente automaticamente
 cat << 'EOF' > /usr/local/bin/restauro_dr
 #!/bin/bash
-# Script de Emergência para restauro forçado via RAID 10
 REPO="/data/restic"
 WEB_SERVER="192.168.1.100"
 STAGING="/backup/backrest/RESTAURO_AUTO"
+SSH_KEY="/backup/ssh_keys/id_rsa"
 
-echo "[DR] A desbloquear repositório..."
+echo "--- Iniciando Restauro de Emergência ---"
 sudo podman exec backrest restic -r $REPO unlock
-
-echo "[DR] A realizar restauro local no RAID..."
 mkdir -p $STAGING
 sudo podman exec backrest restic -r $REPO restore latest --target /config/RESTAURO_AUTO
 
-echo "[DR] A repor ficheiro no Web Server via SFTP..."
+echo "Repondo ficheiro no Web Server..."
+# Garante que a pasta existe no destino antes de enviar
+ssh -i $SSH_KEY root@$WEB_SERVER "mkdir -p /backup_db"
 FICHEIRO=$(find $STAGING -name "*.sql.gz" | head -n 1)
-if [ -f "$FICHEIRO" ]; then
-    sftp -i /backup/ssh_keys/id_rsa root@$WEB_SERVER <<SFTP_EOF
-mkdir /backup_db
-put $FICHEIRO /backup_db/db_backup_recuperado.sql.gz
-quit
-SFTP_EOF
-    echo "[OK] Dados repostos no Web Server."
-else
-    echo "[ERRO] Ficheiro não encontrado em $STAGING."
-fi
+scp -i $SSH_KEY $FICHEIRO root@$WEB_SERVER:/backup_db/db_backup_recuperado.sql.gz
+echo "--- Restauro Finalizado ---"
 EOF
 chmod +x /usr/local/bin/restauro_dr
 
-# --- 8. INTERFACE GUI (BACKREST) COM VOLUMES DE SEGURANÇA ---
-# Nota: Adicionadas chaves SSH e privilégios para restauro estável
+# --- 7. ARRANQUE DO CONTENTOR (CONFIGURAÇÃO OTIMIZADA) ---
+# Adicionados volumes para chaves SSH e permissão de escrita (:rw)
+podman stop backrest || true && podman rm backrest || true
 podman run -d --name backrest --restart always -p 8000:9898 \
   -v /backup/backrest:/config:Z \
   -v /backup/restic:/data/restic:Z \
@@ -130,6 +118,7 @@ podman run -d --name backrest --restart always -p 8000:9898 \
 echo "============================================================"
 echo " SERVIDOR DE BACKUPS CONFIGURADO COM SUCESSO"
 echo " RAID 10: Ativo em /backup"
-echo " SCRIPT DR: /usr/local/bin/restauro_dr"
-echo " GUI: http://$(hostname -I | awk '{print $1}'):8000"
+echo " SCRIPT DE EMERGÊNCIA: restauro_dr"
+echo " NOTA: Verifica a 'Retention Policy' na GUI para não apagar"
+echo " snapshots indesejados (Forget policy)."
 echo "============================================================"
