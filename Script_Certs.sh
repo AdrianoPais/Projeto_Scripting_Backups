@@ -36,11 +36,11 @@ read -r -p "Domínio DuckDNS (ex: webserver-atec.duckdns.org): " DOMAIN
 DOMAIN="${DOMAIN// /}"
 [[ -z "${DOMAIN}" ]] && fail "Domínio vazio."
 
-read -r -p "Token DuckDNS (ex: 670824af-cfce-4ff2-944e-54aaa87034e3): " DUCKDNS_TOKEN
+read -r -p "Token DuckDNS: " DUCKDNS_TOKEN
 DUCKDNS_TOKEN="${DUCKDNS_TOKEN// /}"
 [[ -z "${DUCKDNS_TOKEN}" ]] && fail "Token vazio."
 
-read -r -p "Email (ex: danielricard77@gmail.com): " LE_EMAIL
+read -r -p "Email (ex: exemplo@gmail.com): " LE_EMAIL
 LE_EMAIL="${LE_EMAIL// /}"
 
 WEBROOT="/var/www/html"
