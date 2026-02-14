@@ -786,8 +786,8 @@ while true; do
         7  "Testar Ligacao SSH" \
         8  "Ver Logs" \
         9  "Estado do RAID 10" \
-        "\Z110\Zn" "Agendamentos" \
-        "\Z111\Zn" "Reconfigurar" \
+        10 "Agendamentos" \
+        11 "Reconfigurar" \
         2>"$TEMP_FILE"
 
     if [[ $? -ne 0 ]]; then
@@ -809,8 +809,8 @@ while true; do
         7)  testar_ligacao ;;
         8)  ver_logs ;;
         9)  estado_raid ;;
-        "\Z110\Zn") menu_agendamentos ;;
-        "\Z111\Zn") dialog --title " Reconfigurar " --editbox "$CONF_FILE" 12 55 2>"$TEMP_FILE"
+        10) menu_agendamentos ;;
+        11) dialog --title " Reconfigurar " --editbox "$CONF_FILE" 12 55 2>"$TEMP_FILE"
             if [[ $? -eq 0 ]]; then
                 cp "$TEMP_FILE" "$CONF_FILE"
                 source "$CONF_FILE"
