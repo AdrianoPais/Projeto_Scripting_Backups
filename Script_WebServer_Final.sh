@@ -6,7 +6,7 @@
 
 set -euo pipefail
 
-# --- 0. VERIFICAÇÃO DE ROOT ---
+# --- 0. VERIFICAÇÃO DE ROOT (Deve ser a primeira coisa) ---
 if [[ "$(id -u)" -ne 0 ]]; then
     echo "ERRO: Este script tem de ser corrido como root (sudo)."
     exit 1
@@ -19,9 +19,11 @@ configurar_rede_interativa() {
     echo "   ATEC // SYSTEM_CORE_2026 - CONFIGURAÇÃO DE REDE"
     echo "============================================================"
     
+    # Pedir Hostname
     read -p "Definir Hostname (Enter para 'webserver-atec'): " HOSTNAME_INPUT
     HOSTNAME_NEW="${HOSTNAME_INPUT:-webserver-atec}"
     
+    # Listar interfaces
     echo -e "\n[INFO] Interfaces detetadas:"
     nmcli device status | grep -v "DEVICE"
     echo ""
@@ -49,9 +51,11 @@ configurar_rede_interativa() {
     echo -e "\n[INFO] A aplicar configurações de rede..."
     hostnamectl set-hostname "$HOSTNAME_NEW"
     
+    # Tenta configurar a ligação existente ou cria uma nova se falhar
     nmcli con mod "Wired connection 1" ipv4.method manual ipv4.addresses "$IP_ADDR" ipv4.gateway "$GATEWAY" ipv4.dns "$DNS1" ipv6.method ignore 2>/dev/null || \
     nmcli con mod "$IFACE" ipv4.method manual ipv4.addresses "$IP_ADDR" ipv4.gateway "$GATEWAY" ipv4.dns "$DNS1" ipv6.method ignore
     
+    # Reiniciar interface
     nmcli con down "$IFACE" 2>/dev/null || true
     nmcli con up "$IFACE" 2>/dev/null || nmcli con up "Wired connection 1"
     
@@ -61,26 +65,47 @@ configurar_rede_interativa() {
 # --- 1. EXECUTAR CONFIGURAÇÃO DE REDE ---
 configurar_rede_interativa
 
-# --- 2. CONFIGURAÇÃO DUCKDNS ---
+# --- CONFIGURAÇÃO DUCKDNS (AUTOMATIZADA) ---
 echo -e "\n[INFO] A configurar DuckDNS para acesso externo..."
+
+# [cite_start]Definição de variáveis sem espaços 
 DUCK_TOKEN="4d97ee77-41b5-4f2d-a9e1-b305a7e9a61a"
 DUCK_DOMAIN="webserver-atec"
 
+# Criar o script de atualização no sistema
+cat > /usr/local/sbin/duckdns_update.sh <<EOF
+#!/bin/bash
+# Script de atualização automática de IP Público
+echo url="https://www.duckdns.org/update?domains=${DUCK_DOMAIN}&token=${DUCK_TOKEN}&ip=" | curl -k -K -
+EOF
+
+# Definir permissões de execução e segurança
+chmod 700 /usr/local/sbin/duckdns_update.sh
+# Garantir que apenas o root pode ler o token
+chmod 600 /usr/local/sbin/duckdns_update.sh
+
+# Agendamento no Crontab (Execução a cada 5 minutos)
+(crontab -l 2>/dev/null; echo "*/5 * * * * /usr/local/sbin/duckdns_update.sh >/dev/null 2>&1") | crontab -
+
+echo "[OK] DuckDNS configurado para ${DUCK_DOMAIN}.duckdns.org."
+
+# Criar o script de atualização
 cat > /usr/local/sbin/duckdns_update.sh <<EOF
 #!/bin/bash
 echo url="https://www.duckdns.org/update?domains=${DUCK_DOMAIN}&token=${DUCK_TOKEN}&ip=" | curl -k -K -
 EOF
 
-chmod 700 /usr/local/sbin/duckdns_update.sh
-(crontab -l 2>/dev/null; echo "*/5 * * * * /usr/local/sbin/duckdns_update.sh >/dev/null 2>&1") | crontab -
-echo "[OK] DuckDNS configurado."
+chmod +x /usr/local/sbin/duckdns_update.sh
 
-# --- 3. INSTALAÇÃO DE SERVIÇOS (LAMP + SEGURANÇA) ---
-echo -e "\n[INFO] A instalar Apache, PHP, MariaDB e Ferramentas de Segurança..."
-dnf -y install epel-release
+# Adicionar ao crontab para atualizar a cada 5 minutos
+(crontab -l 2>/dev/null; echo "*/5 * * * * /usr/local/sbin/duckdns_update.sh >/dev/null 2>&1") | crontab -
+
+echo "[OK] DuckDNS configurado. O domínio ${DUCK_DOMAIN}.duckdns.org será atualizado automaticamente."
+
+# --- 3. INSTALAÇÃO DE SERVIÇOS (LAMP) ---
+echo -e "\n[INFO] A instalar Apache, PHP e MariaDB..."
 dnf -y update
-dnf -y install httpd php php-mysqlnd mariadb-server firewalld rsync \
-    fail2ban fail2ban-firewalld mod_security mod_security_crs
+dnf -y install httpd php php-mysqlnd mariadb-server firewalld rsync
 
 # --- 4. CONFIGURAÇÃO FIREWALL (DMZ) ---
 echo "[INFO] A configurar Firewall..."
@@ -443,105 +468,44 @@ cat > "${WEBROOT}/index.html" <<'HTML'
 </html>
 HTML
 
+# Definir permissões e contexto SELinux
 chown -R apache:apache "${WEBROOT}"
 restorecon -Rv "${WEBROOT}"
 
-# --- 6. INTEGRACAO: PERFORMANCE TUNING ---
-echo "[INFO] A aplicar Performance Tuning (Apache/MySQL/System)..."
-
-# Apache Performance
-cat > /etc/httpd/conf.d/performance.conf <<PERFCONF
-Timeout 60
-KeepAlive On
-MaxKeepAliveRequests 100
-KeepAliveTimeout 5
-<IfModule mpm_event_module>
-    StartServers             5
-    MinSpareThreads          5
-    MaxSpareThreads          10
-    ThreadsPerChild          25
-    MaxRequestWorkers        150
-    MaxConnectionsPerChild   1000
-</IfModule>
-<IfModule mod_deflate.c>
-    AddOutputFilterByType DEFLATE text/html text/plain text/xml text/css application/javascript application/json
-</IfModule>
-PERFCONF
-
-# Kernel Performance
-cat >> /etc/sysctl.conf <<SYSCTLCONF
-net.core.somaxconn = 4096
-net.ipv4.tcp_max_syn_backlog = 4096
-fs.file-max = 65536
-vm.swappiness = 10
-SYSCTLCONF
-sysctl -p &>/dev/null || true
-
-# --- 7. INTEGRACAO: FAIL2BAN ---
-echo "[INFO] A configurar Fail2Ban..."
-cat > /etc/fail2ban/jail.local <<F2BCONF
-[DEFAULT]
-bantime = 3600
-findtime = 600
-maxretry = 5
-backend = systemd
-banaction = firewallcmd-ipset
-[sshd]
-enabled = true
-[apache-auth]
-enabled = true
-[apache-badbots]
-enabled = true
-[apache-noscript]
-enabled = true
-F2BCONF
-
-# --- 8. INTEGRACAO: MODSECURITY (WAF) ---
-echo "[INFO] A configurar ModSecurity..."
-cp /etc/httpd/conf.d/mod_security.conf /etc/httpd/conf.d/mod_security.conf.orig 2>/dev/null || true
-sed -i 's/SecRuleEngine DetectionOnly/SecRuleEngine On/' /etc/httpd/conf.d/mod_security.conf 2>/dev/null || true
-# Copiar configuração CRS se existir
-if [[ -f /usr/share/mod_modsecurity_crs/crs-setup.conf.example ]]; then
-    cp /usr/share/mod_modsecurity_crs/crs-setup.conf.example /usr/share/mod_modsecurity_crs/crs-setup.conf
-fi
-
-# --- 9. ATIVAR SERVIÇOS E HARDENING (MARIADB) ---
-echo "[INFO] A iniciar serviços e aplicar hardening total..."
+# --- 6. ATIVAR SERVIÇOS E HARDENING (MARIADB) ---
+echo "[INFO] A iniciar serviços e aplicar hardening total do MariaDB..."
 systemctl enable --now httpd
 systemctl enable --now mariadb
-systemctl enable --now fail2ban
 
+# CORREÇÃO: Sintaxe correta do 'read'
 echo ""
 echo "!!! ATENÇÃO: A próxima password será definida como ROOT da base de dados !!!"
 read -s -p "Introduz a password para o root do MariaDB: " DB_ROOT_PASSWORD
 echo ""
 
-# Hardening MySQL e Tuning básico (Performance)
+# Execução do Hardening Completo
 mysql -u root <<SQL
+-- 1. Definir password do root
 ALTER USER 'root'@'localhost' IDENTIFIED BY '${DB_ROOT_PASSWORD}';
+
+-- 2. Remover utilizadores anónimos
 DELETE FROM mysql.user WHERE User='';
+
+-- 3. Desativar login remoto do root
 DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1');
+
+-- 4. Remover base de dados de teste
 DROP DATABASE IF EXISTS test;
+DELETE FROM mysql.db WHERE Db='test' OR Db='test\\_%';
+
+-- 5. Recarregar privilégios
 FLUSH PRIVILEGES;
-SET GLOBAL max_connections = 150;
-SET GLOBAL innodb_buffer_pool_size = 512 * 1024 * 1024;
 SQL
 
-# Criar configuração permanente do MySQL para Performance
-cat > /etc/my.cnf.d/performance.cnf <<MYSQLCONF
-[mysqld]
-max_connections = 150
-innodb_buffer_pool_size = 512M
-innodb_flush_log_at_trx_commit = 2
-innodb_file_per_table = 1
-query_cache_type = 0
-query_cache_size = 0
-MYSQLCONF
+# CORREÇÃO: 'ok' substituído por 'echo'
+echo "[OK] MariaDB configurado de acordo com os requisitos de segurança."
 
-systemctl restart mariadb
-systemctl restart httpd
-
-# --- 10. RESUMO FINAL ---
+# --- 7. RESUMO FINAL ---
 IP_FINAL=$(hostname -I | awk '{print $1}')
 echo ""
 echo "============================================================"
@@ -550,9 +514,6 @@ echo "============================================================"
 echo " > Website Online: http://${IP_FINAL}"
 echo " > Hostname:       $(hostname)"
 echo ""
-echo "  MÓDULOS ATIVOS:"
-echo "  [OK] Performance Tuning (Apache/Kernel/MySQL)"
-echo "  [OK] Fail2Ban (Proteção Brute-force)"
-echo "  [OK] ModSecurity (WAF)"
-echo ""
+echo " Certifique-se de configurar o Port Forwarding (Porta 80)"
+echo " no router para o IP ${IP_FINAL}."
 echo "============================================================"
