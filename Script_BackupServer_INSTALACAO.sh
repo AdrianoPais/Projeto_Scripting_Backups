@@ -3,6 +3,7 @@
 #  BACKUP SERVER - ATEC SYSTEM_CORE_2026
 #  SCRIPT 1: INSTALAÇÃO E CONFIGURAÇÃO COMPLETA
 #  Rede + Pacotes + RAID 10 + SSH + Cron + Primeiro Backup
+#  (Integrado: Suporte para Backup DB)
 # ============================================================
 
 # --- CORES ---
@@ -32,7 +33,7 @@ echo "  Este script configura TUDO de uma vez:"
 echo ""
 echo "  FASE 1 - SISTEMA"
 echo "    1. Hostname e Rede (IP fixo)"
-echo "    2. Pacotes (rsync, mdadm, dialog, etc.)"
+echo "    2. Pacotes (rsync, mdadm, dialog, mariadb, etc.)"
 echo "    3. Firewall"
 echo ""
 echo "  FASE 2 - RAID 10"
@@ -110,8 +111,9 @@ echo ""
 echo "------------------------------------------------------------"
 echo "  PASSO 2: INSTALACAO DE PACOTES"
 echo "------------------------------------------------------------"
-info "A instalar pacotes..."
-dnf -y install rsync openssh-clients dialog cronie firewalld mdadm bc 2>&1 | tail -5
+info "A instalar pacotes (incluindo MariaDB Client)..."
+# ADICIONADO: 'mariadb' para permitir mysqldump remoto
+dnf -y install rsync openssh-clients dialog cronie firewalld mdadm bc mariadb 2>&1 | tail -5
 ok "Pacotes instalados."
 
 # --- 3. FIREWALL ---
