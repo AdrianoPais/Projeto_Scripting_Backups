@@ -124,255 +124,344 @@ cat > "${WEBROOT}/index.html" <<'HTML'
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ATEC // SYSTEM_CORE_2026</title>
-    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=VT323&display=swap" rel="stylesheet">
+    <title>ATEC // NEON_CORE_2026</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;900&family=Mr+Dafoe&family=VT323&display=swap" rel="stylesheet">
     <style>
-        /* VARIÁVEIS DE CORES NEON */
         :root {
-            --neon-pink: #ff2a6d;
-            --neon-blue: #05d9e8;
-            --neon-purple: #d100d1;
-            --grid-bg: #01012b;
-            --text-main: #e0e0e0;
+            --bg-color: #050011;
+            --neon-pink: #ff0055;
+            --neon-magenta: #d600ff;
+            --neon-cyan: #00f2ff;
+            --grid-line: rgba(255, 0, 85, 0.2);
+            --card-bg: rgba(10, 10, 10, 0.8);
         }
 
-        /* RESET E BASE */
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
 
         body {
-            background-color: var(--grid-bg);
-            color: var(--text-main);
+            background-color: var(--bg-color);
+            color: #fff;
             font-family: 'VT323', monospace;
             overflow-x: hidden;
-            font-size: 1.2rem;
-            line-height: 1.6;
+            font-size: 1.3rem;
         }
 
-        /* EFEITO DE SCANLINE (CRT) */
+        /* --- FUNDO E GRELHA --- */
+        .retro-landscape {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            z-index: -2;
+            background: linear-gradient(to bottom, #020005 0%, #1a001a 100%);
+        }
+
+        .grid {
+            position: fixed;
+            bottom: -30%; left: -50%; width: 200%; height: 100%;
+            background-image: 
+                linear-gradient(0deg, transparent 24%, var(--grid-line) 25%, var(--grid-line) 26%, transparent 27%, transparent 74%, var(--grid-line) 75%, var(--grid-line) 76%, transparent 77%, transparent),
+                linear-gradient(90deg, transparent 24%, var(--grid-line) 25%, var(--grid-line) 26%, transparent 27%, transparent 74%, var(--grid-line) 75%, var(--grid-line) 76%, transparent 77%, transparent);
+            background-size: 50px 50px;
+            transform: perspective(300px) rotateX(60deg);
+            animation: moveGrid 4s linear infinite;
+            z-index: -1;
+            box-shadow: 0 0 50px var(--neon-pink);
+        }
+
         .scanlines {
             position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(
-                to bottom,
-                rgba(255, 255, 255, 0),
-                rgba(255, 255, 255, 0) 50%,
-                rgba(0, 0, 0, 0.2) 50%,
-                rgba(0, 0, 0, 0.2)
-            );
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%);
             background-size: 100% 4px;
             pointer-events: none;
-            z-index: 1000;
-            animation: scanline 0.2s linear infinite;
+            z-index: 999;
+            opacity: 0.4;
         }
 
-        /* ANIMAÇÃO DO FUNDO EM GRELHA 3D */
-        .grid-floor {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            width: 100%;
-            height: 50vh;
-            background: 
-                linear-gradient(transparent 0%, var(--grid-bg) 100%),
-                linear-gradient(90deg, rgba(5, 217, 232, 0.3) 1px, transparent 1px),
-                linear-gradient(0deg, rgba(255, 42, 109, 0.3) 1px, transparent 1px);
-            background-size: 100% 100%, 40px 40px, 40px 40px;
-            transform: perspective(500px) rotateX(60deg) translateY(100px) scale(2);
-            z-index: -1;
-            animation: moveGrid 5s linear infinite;
-        }
-
-        /* HEADER */
+        /* --- HEADER --- */
         header {
+            min-height: 90vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
             text-align: center;
-            padding: 3rem 1rem;
-            border-bottom: 2px solid var(--neon-pink);
-            box-shadow: 0 0 20px var(--neon-pink);
+            position: relative;
+        }
+
+        /* A TUA IMAGEM (LOGÓTIPO) */
+        .cyber-logo {
+            width: 180px;
+            height: auto;
+            filter: drop-shadow(0 0 25px var(--neon-cyan)) drop-shadow(0 0 10px var(--neon-magenta));
+            animation: floatAndSpin 8s ease-in-out infinite;
+            margin-bottom: 2rem;
         }
 
         h1 {
             font-family: 'Orbitron', sans-serif;
-            font-size: 4rem;
-            text-transform: uppercase;
+            font-size: clamp(4rem, 10vw, 8rem);
+            font-weight: 900;
             color: #fff;
-            text-shadow: 
-                0 0 5px #fff,
-                0 0 10px #fff,
-                0 0 20px var(--neon-blue),
-                0 0 40px var(--neon-blue),
-                0 0 80px var(--neon-blue);
+            text-transform: uppercase;
             letter-spacing: 5px;
-            margin-bottom: 0.5rem;
+            text-shadow: 4px 4px 0px var(--neon-pink), -2px -2px 0px var(--neon-cyan);
+            animation: glitch 3s infinite;
+            line-height: 1;
         }
 
         .subtitle {
-            color: var(--neon-pink);
-            font-size: 1.5rem;
-            letter-spacing: 3px;
-            text-transform: uppercase;
+            font-family: 'Mr Dafoe', cursive;
+            font-size: 2.5rem;
+            color: var(--neon-cyan);
+            text-shadow: 0 0 15px var(--neon-cyan);
+            transform: rotate(-5deg) translateY(-10px);
+            margin-bottom: 3rem;
         }
 
-        /* CONTEÚDO PRINCIPAL */
-        main {
-            max-width: 1000px;
-            margin: 4rem auto;
-            padding: 0 2rem;
+        /* --- CONTEÚDO (SOBRE A ATEC) --- */
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+            position: relative;
             z-index: 10;
+        }
+
+        .info-panel {
+            border: 2px solid var(--neon-cyan);
+            background: rgba(0, 10, 20, 0.8);
+            padding: 2rem;
+            margin-bottom: 4rem;
+            box-shadow: 0 0 20px rgba(0, 242, 255, 0.2);
             position: relative;
         }
 
-        .terminal-box {
-            border: 1px solid var(--neon-blue);
-            background: rgba(5, 217, 232, 0.05);
-            padding: 2rem;
-            margin-bottom: 3rem;
-            box-shadow: 0 0 15px rgba(5, 217, 232, 0.2);
-        }
-
-        h2 {
+        .info-panel::before {
+            content: "SYSTEM_INFO // READ_ONLY";
+            position: absolute;
+            top: -15px; left: 20px;
+            background: var(--bg-color);
+            padding: 0 10px;
+            color: var(--neon-cyan);
             font-family: 'Orbitron', sans-serif;
-            color: var(--neon-blue);
-            border-bottom: 1px dashed var(--neon-blue);
-            padding-bottom: 0.5rem;
-            margin-bottom: 1.5rem;
+            font-size: 0.9rem;
         }
 
-        /* GRELHA DE CURSOS */
-        .courses-grid {
+        p.description {
+            font-size: 1.4rem;
+            line-height: 1.6;
+            color: #eee;
+            text-align: justify;
+        }
+
+        .highlight { color: var(--neon-pink); font-weight: bold; }
+
+        /* --- CARTÕES DE CURSOS --- */
+        .section-title {
+            color: var(--neon-magenta);
+            font-family: 'Orbitron', sans-serif;
+            font-size: 2.5rem;
+            border-bottom: 3px solid var(--neon-pink);
+            display: inline-block;
+            margin-bottom: 3rem;
+            text-shadow: 0 0 10px var(--neon-magenta);
+        }
+
+        .cards-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
             gap: 2rem;
         }
 
-        .card {
-            border: 2px solid var(--neon-purple);
-            padding: 1.5rem;
-            background: rgba(13, 2, 33, 0.8);
-            transition: all 0.3s ease;
+        .cyber-card {
+            background: var(--card-bg);
+            border: 1px solid var(--neon-pink);
+            padding: 2rem;
+            transition: 0.3s;
             position: relative;
             overflow: hidden;
         }
 
-        .card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 0 25px var(--neon-purple);
-            background: rgba(209, 0, 209, 0.1);
+        .cyber-card::after {
+            content: "";
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 5px;
+            background: var(--neon-cyan);
+            box-shadow: 0 0 15px var(--neon-cyan);
         }
 
-        .card h3 {
-            color: var(--neon-pink);
+        .cyber-card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 0 30px var(--neon-pink);
+            border-color: var(--neon-cyan);
+        }
+
+        .cyber-card h3 {
             font-family: 'Orbitron', sans-serif;
+            color: var(--neon-cyan);
+            font-size: 1.6rem;
             margin-bottom: 1rem;
         }
 
-        .btn {
-            display: inline-block;
+        .cyber-card ul {
+            list-style: none;
             margin-top: 1rem;
-            padding: 0.5rem 1.5rem;
-            background: transparent;
-            color: var(--neon-blue);
-            border: 2px solid var(--neon-blue);
-            text-decoration: none;
-            font-weight: bold;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-            transition: 0.3s;
-            cursor: pointer;
         }
 
-        .btn:hover {
-            background: var(--neon-blue);
-            color: var(--grid-bg);
-            box-shadow: 0 0 20px var(--neon-blue);
+        .cyber-card li {
+            margin-bottom: 0.5rem;
+            padding-left: 1.5rem;
+            position: relative;
         }
 
-        /* RODAPÉ */
+        .cyber-card li::before {
+            content: ">";
+            position: absolute;
+            left: 0;
+            color: var(--neon-pink);
+        }
+
+        /* --- LOCALIZAÇÕES --- */
+        .locations {
+            display: flex;
+            justify-content: space-around;
+            margin-top: 5rem;
+            flex-wrap: wrap;
+            gap: 2rem;
+        }
+
+        .node {
+            text-align: center;
+            border: 1px dashed var(--neon-magenta);
+            padding: 1.5rem 3rem;
+            border-radius: 50px;
+            background: rgba(255, 0, 85, 0.05);
+        }
+
+        .node h4 {
+            color: var(--neon-pink);
+            font-size: 1.8rem;
+            font-family: 'Orbitron', sans-serif;
+        }
+
+        /* --- FOOTER --- */
         footer {
             text-align: center;
-            padding: 2rem;
-            color: var(--neon-purple);
-            font-size: 1rem;
+            padding: 3rem;
             margin-top: 4rem;
-            border-top: 1px solid var(--neon-purple);
+            border-top: 1px solid #333;
+            color: #666;
         }
 
-        /* ANIMAÇÕES */
+        /* --- ANIMAÇÕES --- */
         @keyframes moveGrid {
-            0% { background-position: 0 0, 0 0, 0 0; }
-            100% { background-position: 0 100%, 0 40px, 0 40px; }
+            0% { transform: perspective(300px) rotateX(60deg) translateY(0); }
+            100% { transform: perspective(300px) rotateX(60deg) translateY(50px); }
         }
 
-        @keyframes scanline {
-            0% { background-position: 0 0; }
-            100% { background-position: 0 100%; }
+        @keyframes floatAndSpin {
+            0% { transform: translateY(0) rotate(0deg); }
+            50% { transform: translateY(-15px) rotate(180deg); }
+            100% { transform: translateY(0) rotate(360deg); }
         }
 
-        /* PISCAR CURSOR */
-        .blink {
-            animation: blinker 1s linear infinite;
-        }
-        @keyframes blinker {
-            50% { opacity: 0; }
+        @keyframes glitch {
+            0% { text-shadow: 4px 4px 0 var(--neon-pink), -2px -2px 0 var(--neon-cyan); }
+            2% { text-shadow: -4px 4px 0 var(--neon-pink), 2px -2px 0 var(--neon-cyan); }
+            100% { text-shadow: 4px 4px 0 var(--neon-pink), -2px -2px 0 var(--neon-cyan); }
         }
     </style>
 </head>
 <body>
 
     <div class="scanlines"></div>
-    <div class="grid-floor"></div>
+    <div class="retro-landscape">
+        <div class="grid"></div>
+    </div>
 
     <header>
+        <img src="images-removebg-preview.ico" alt="ATEC CORE" class="cyber-logo">
+        
         <h1>ATEC</h1>
-        <div class="subtitle">ACADEMIA_DE_FORMAÇÃO // 2026</div>
+        <div class="subtitle">Academia do Futuro</div>
     </header>
 
-    <main>
-        <section class="terminal-box">
-            <p>> A INICIAR SISTEMA...</p>
-            <p>> CARREGAR MÓDULOS DE CONHECIMENTO... [OK]</p>
-            <p>> LIGAR AOS SERVIDORES DE PALMELA E MATOSINHOS... [OK]</p>
-            <br>
-            <p>BEM-VINDO, UTILIZADOR. O FUTURO DA TUA CARREIRA COMEÇA AQUI. PREPARA-TE PARA O UPLOAD DE COMPETÊNCIAS TÉCNICAS.<span class="blink">_</span></p>
-        </section>
+    <div class="container">
+        
+        <div class="info-panel">
+            <p class="description">
+                A <span class="highlight">ATEC</span> é o núcleo central de processamento de talento técnico. 
+                Dedicada ao desenvolvimento de hardware humano, convertemos utilizadores comuns em 
+                <span class="highlight">Especialistas de Sistema</span>.
+                <br><br>
+                Com infraestruturas de última geração, operamos na fronteira entre a teoria e a prática, 
+                garantindo que o código da tua carreira está otimizado para o mercado global.
+            </p>
+        </div>
 
-        <h2>// ÁREAS_DE_DADOS</h2>
-        <div class="courses-grid">
-            <div class="card">
+        <h2 class="section-title">>> MÓDULOS DE DADOS</h2>
+        
+        <div class="cards-grid">
+            <div class="cyber-card">
                 <h3>CIBERSEGURANÇA</h3>
-                <p>Protege a rede neural. Aprende defesa cibernética, hacking ético e segurança de infraestruturas críticas.</p>
-                <a href="#" class="btn">ACEDER ></a>
+                <p style="color: #aaa;">NÍVEL 5 // TESP</p>
+                <ul>
+                    <li>Ethical Hacking</li>
+                    <li>Criptografia de Dados</li>
+                    <li>Defesa de Redes</li>
+                    <li>Análise Forense</li>
+                </ul>
             </div>
 
-            <div class="card">
+            <div class="cyber-card">
                 <h3>PROGRAMAÇÃO</h3>
-                <p>Escreve o código do amanhã. Java, Python, C# e desenvolvimento Web Full-Stack para arquitetos digitais.</p>
-                <a href="#" class="btn">ACEDER ></a>
+                <p style="color: #aaa;">NÍVEL 5 // TESP</p>
+                <ul>
+                    <li>Java & Python</li>
+                    <li>Web Development</li>
+                    <li>Base de Dados SQL</li>
+                    <li>Inteligência Artificial</li>
+                </ul>
             </div>
 
-            <div class="card">
+            <div class="cyber-card">
                 <h3>MECATRÓNICA</h3>
-                <p>Fusão de hardware e inteligência. Automação industrial, robótica e manutenção de sistemas complexos.</p>
-                <a href="#" class="btn">ACEDER ></a>
+                <p style="color: #aaa;">NÍVEL 4 // APRENDIZAGEM</p>
+                <ul>
+                    <li>Robótica Industrial</li>
+                    <li>Automação (PLC)</li>
+                    <li>Eletrónica Digital</li>
+                    <li>Manutenção 4.0</li>
+                </ul>
             </div>
-            
-             <div class="card">
+
+             <div class="cyber-card">
                 <h3>REDES 5G</h3>
-                <p>Conetividade de alta velocidade. Instalação e gestão de redes de nova geração.</p>
-                <a href="#" class="btn">ACEDER ></a>
+                <p style="color: #aaa;">ESPECIALIZAÇÃO</p>
+                <ul>
+                    <li>Infraestruturas Cloud</li>
+                    <li>Virtualização</li>
+                    <li>IoT (Internet of Things)</li>
+                    <li>Routing & Switching</li>
+                </ul>
             </div>
         </div>
-    </main>
+
+        <div class="locations">
+            <div class="node">
+                <h4>PALMELA</h4>
+                <p style="color: var(--neon-cyan)">SERVER_01 // HQ</p>
+            </div>
+            <div class="node">
+                <h4>MATOSINHOS</h4>
+                <p style="color: var(--neon-cyan)">SERVER_02 // NORTH</p>
+            </div>
+        </div>
+
+    </div>
 
     <footer>
-        <p>COPYRIGHT © 2026 ATEC // TODOS OS SISTEMAS OPERACIONAIS</p>
-        <p>PALMELA | MATOSINHOS | CASCAIS</p>
+        <p>COPYRIGHT © 2026 ATEC // SISTEMA OPERATIVO SEGURO</p>
     </footer>
 
 </body>
