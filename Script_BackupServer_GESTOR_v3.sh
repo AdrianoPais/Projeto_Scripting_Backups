@@ -26,6 +26,7 @@ source "$CONF_FILE"
 # --- VARIAVEIS ---
 BACKUP_WEB="${BACKUP_BASE}/web/incremental"
 BACKUP_CURRENT="${BACKUP_WEB}/current"
+BACKUP_DB="${BACKUP_BASE}/db/incremental"
 LOG_DIR="${BACKUP_BASE}/logs"
 TEMP_FILE=$(mktemp)
 trap "rm -f $TEMP_FILE" EXIT
@@ -65,6 +66,16 @@ mostrar_estado() {
     local num_agendamentos=0
     num_agendamentos=$(crontab -l 2>/dev/null | grep -c "backup-auto.sh" || echo 0)
     
+    # Info sobre backups BD
+    local num_backups_db=0
+    num_backups_db=$(find "$BACKUP_DB" -name "*.sql.gz" 2>/dev/null | wc -l)
+    local ultimo_db="Nunca"
+    local ultimo_db_file=""
+    ultimo_db_file=$(ls -t "${BACKUP_DB}"/*.sql.gz 2>/dev/null | head -1)
+    if [[ -n "$ultimo_db_file" ]]; then
+        ultimo_db=$(stat -c '%y' "$ultimo_db_file" 2>/dev/null | cut -d'.' -f1)
+    fi
+    
     info="\n  ESTADO DO SISTEMA\n"
     info+="  ================================\n\n"
     info+="  WebServer:     ${WEBSERVER_USER}@${WEBSERVER_IP}\n"
@@ -72,10 +83,12 @@ mostrar_estado() {
     info+="  Backup atual:  ${backup_size}\n"
     info+="  Versoes:       ${versoes} incrementais\n"
     info+="  Ultimo backup: ${ultimo}\n"
+    info+="  Backups BD:    ${num_backups_db} disponiveis\n"
+    info+="  Ultimo BD:     ${ultimo_db}\n"
     info+="  Agendamentos:  ${num_agendamentos} ativos\n"
     info+="  Disco RAID:    ${disco}\n"
     info+="  Estado RAID:   ${raid_status}\n"
-    dialog --title " Estado do Sistema " --msgbox "$info" 18 55
+    dialog --title " Estado do Sistema " --msgbox "$info" 20 55
 }
 
 fazer_backup() {
@@ -770,13 +783,229 @@ menu_agendamentos() {
 
 
 # ============================================================
+#  FUNCOES - BACKUP BASE DE DADOS (MariaDB)
+# ============================================================
+
+fazer_backup_db() {
+    # Pedir password do MariaDB
+    dialog --title " Backup Base de Dados " --insecure --passwordbox \
+        "\nPassword do root do MariaDB no WebServer:" 9 55 2>"$TEMP_FILE"
+    [[ $? -ne 0 ]] && return
+    local DB_PASS=$(cat "$TEMP_FILE")
+    [[ -z "$DB_PASS" ]] && { dialog --title " Erro " --msgbox "\nPassword vazia!" 7 30; return; }
+
+    # Confirmar
+    dialog --title " Confirmar Backup BD " --yesno \
+        "\nFazer backup de TODAS as bases de dados\ndo MariaDB no WebServer?\n\nOrigem:  ${WEBSERVER_USER}@${WEBSERVER_IP}\nDestino: ${BACKUP_DB}/" 12 58
+    [[ $? -ne 0 ]] && return
+
+    local TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+    local LOG_FILE="${LOG_DIR}/backup_db_${TIMESTAMP}.log"
+    local DUMP_FILE="${BACKUP_DB}/all_databases_${TIMESTAMP}.sql.gz"
+    mkdir -p "$BACKUP_DB"
+
+    echo "=== BACKUP BD: ${TIMESTAMP} ===" > "$LOG_FILE"
+    (
+        echo "10"; echo "# A ligar ao WebServer..."
+        sleep 1
+        echo "30"; echo "# A exportar bases de dados (mysqldump)..."
+        ssh "${WEBSERVER_USER}@${WEBSERVER_IP}" \
+            "mysqldump -u root -p'${DB_PASS}' --all-databases --single-transaction --routines --triggers" 2>>"$LOG_FILE" | gzip > "$DUMP_FILE"
+        RESULT=${PIPESTATUS[0]}
+        echo "80"; echo "# A verificar ficheiro..."
+        if [ $RESULT -eq 0 ] && [ -s "$DUMP_FILE" ]; then
+            local fsize=$(du -h "$DUMP_FILE" | awk '{print $1}')
+            echo "[OK] Backup BD concluido: ${DUMP_FILE} (${fsize})" >> "$LOG_FILE"
+            echo "100"; echo "# Concluido com sucesso!"
+        else
+            echo "[ERRO] Falha no backup BD (codigo: $RESULT)" >> "$LOG_FILE"
+            rm -f "$DUMP_FILE" 2>/dev/null
+            echo "100"; echo "# ERRO! Verifica o log."
+        fi
+    ) | dialog --title " Backup BD em Progresso " --gauge "\n  A iniciar..." 9 55 0
+
+    # Mostrar resultado
+    local resultado=$(tail -1 "$LOG_FILE")
+    if [[ -f "$DUMP_FILE" ]]; then
+        local fsize=$(du -h "$DUMP_FILE" | awk '{print $1}')
+        dialog --title " Resultado " --msgbox \
+            "\nBackup BD: ${TIMESTAMP}\nFicheiro: $(basename "$DUMP_FILE")\nTamanho: ${fsize}\n\n${resultado}\n\nLog: ${LOG_FILE}" 14 62
+    else
+        dialog --title " Resultado " --msgbox \
+            "\n${resultado}\n\nLog: ${LOG_FILE}" 10 55
+    fi
+}
+
+listar_backups_db() {
+    local lista="\n  BACKUPS DE BASE DE DADOS (MariaDB)\n"
+    lista+="  ==========================================\n\n"
+
+    local encontrou=0
+    local i=1
+    for dump in $(ls -t "${BACKUP_DB}"/*.sql.gz 2>/dev/null); do
+        local nome=$(basename "$dump")
+        local size=$(du -h "$dump" 2>/dev/null | awk '{print $1}')
+        local data=$(stat -c '%y' "$dump" 2>/dev/null | cut -d'.' -f1)
+        lista+="  ${i}. ${nome}\n"
+        lista+="     Tamanho: ${size} | Data: ${data}\n\n"
+        i=$((i + 1))
+        encontrou=1
+    done
+
+    if [[ $encontrou -eq 0 ]]; then
+        lista+="  (nenhum backup encontrado)\n\n"
+        lista+="  Usa a opcao 'Fazer Backup BD' para criar um.\n"
+    fi
+
+    dialog --title " Backups de Base de Dados " --msgbox "$lista" 22 65
+}
+
+restaurar_backup_db() {
+    # Listar backups disponiveis
+    local dumps=()
+    local menu_items=()
+    local i=1
+
+    while IFS= read -r dump; do
+        [[ -z "$dump" ]] && continue
+        dumps+=("$dump")
+        local nome=$(basename "$dump")
+        local size=$(du -h "$dump" 2>/dev/null | awk '{print $1}')
+        menu_items+=("$i" "${nome} (${size})")
+        i=$((i + 1))
+    done < <(ls -t "${BACKUP_DB}"/*.sql.gz 2>/dev/null)
+
+    if [[ ${#dumps[@]} -eq 0 ]]; then
+        dialog --title " Erro " --msgbox "\nNenhum backup de BD disponivel!" 7 40
+        return
+    fi
+
+    dialog --title " Restaurar Backup BD " \
+        --menu "\nEscolhe o backup a restaurar:" 16 65 8 \
+        "${menu_items[@]}" 2>"$TEMP_FILE"
+    [[ $? -ne 0 ]] && return
+
+    local escolha=$(cat "$TEMP_FILE")
+    local dump_file="${dumps[$((escolha-1))]}"
+
+    # Pedir password
+    dialog --title " Restaurar BD " --insecure --passwordbox \
+        "\nPassword do root do MariaDB no WebServer:" 9 55 2>"$TEMP_FILE"
+    [[ $? -ne 0 ]] && return
+    local DB_PASS=$(cat "$TEMP_FILE")
+    [[ -z "$DB_PASS" ]] && { dialog --title " Erro " --msgbox "\nPassword vazia!" 7 30; return; }
+
+    # Confirmar
+    dialog --title " ATENCAO " --yesno \
+        "\nATENCAO: Isto vai SUBSTITUIR todas as bases\nde dados no WebServer!\n\nFicheiro: $(basename "$dump_file")\nDestino: ${WEBSERVER_USER}@${WEBSERVER_IP}\n\nContinuar?" 14 58
+    [[ $? -ne 0 ]] && return
+
+    # Confirmacao extra
+    dialog --title " Confirmacao Final " --inputbox \
+        "\nPara confirmar, escreve RESTAURAR:" 9 45 2>"$TEMP_FILE"
+    local confirm=$(cat "$TEMP_FILE")
+    if [[ "$confirm" != "RESTAURAR" ]]; then
+        dialog --title " Cancelado " --msgbox "\nOperacao cancelada." 7 30
+        return
+    fi
+
+    local TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+    local LOG_FILE="${LOG_DIR}/restore_db_${TIMESTAMP}.log"
+    echo "=== RESTAURO BD: ${TIMESTAMP} ===" > "$LOG_FILE"
+    echo "Ficheiro: $(basename "$dump_file")" >> "$LOG_FILE"
+
+    (
+        echo "10"; echo "# A ligar ao WebServer..."
+        sleep 1
+        echo "30"; echo "# A restaurar bases de dados..."
+        gunzip -c "$dump_file" | ssh "${WEBSERVER_USER}@${WEBSERVER_IP}" \
+            "mysql -u root -p'${DB_PASS}'" >> "$LOG_FILE" 2>&1
+        RESULT=${PIPESTATUS[1]}
+        echo "90"; echo "# A finalizar..."
+        if [ $RESULT -eq 0 ]; then
+            echo "[OK] Restauro BD concluido." >> "$LOG_FILE"
+            echo "100"; echo "# Restauro concluido!"
+        else
+            echo "[ERRO] Falha no restauro BD (codigo: $RESULT)" >> "$LOG_FILE"
+            echo "100"; echo "# ERRO no restauro!"
+        fi
+    ) | dialog --title " Restauro BD em Progresso " --gauge "\n  A iniciar..." 9 55 0
+
+    local resultado=$(tail -1 "$LOG_FILE")
+    dialog --title " Resultado " --msgbox \
+        "\n${resultado}\n\nLog: ${LOG_FILE}" 10 55
+}
+
+apagar_backup_db() {
+    local dumps=()
+    local menu_items=()
+    local i=1
+
+    while IFS= read -r dump; do
+        [[ -z "$dump" ]] && continue
+        dumps+=("$dump")
+        local nome=$(basename "$dump")
+        local size=$(du -h "$dump" 2>/dev/null | awk '{print $1}')
+        menu_items+=("$i" "${nome} (${size})")
+        i=$((i + 1))
+    done < <(ls -t "${BACKUP_DB}"/*.sql.gz 2>/dev/null)
+
+    if [[ ${#dumps[@]} -eq 0 ]]; then
+        dialog --title " Info " --msgbox "\nNenhum backup de BD para apagar." 7 40
+        return
+    fi
+
+    dialog --title " Apagar Backup BD " \
+        --menu "\nEscolhe o backup a apagar:" 16 65 8 \
+        "${menu_items[@]}" 2>"$TEMP_FILE"
+    [[ $? -ne 0 ]] && return
+
+    local escolha=$(cat "$TEMP_FILE")
+    local dump_file="${dumps[$((escolha-1))]}"
+
+    dialog --title " Confirmar " --yesno \
+        "\nApagar este backup de BD?\n\n$(basename "$dump_file")" 10 55
+    [[ $? -ne 0 ]] && return
+
+    rm -f "$dump_file"
+    dialog --title " OK " --msgbox "\nBackup apagado." 7 30
+}
+
+menu_backups_db() {
+    while true; do
+        dialog --title " BACKUPS BASE DE DADOS (MariaDB) " \
+            --cancel-label "Voltar" \
+            --menu "\nGestao de backups da base de dados:\n" 16 55 5 \
+            1 "Fazer Backup BD AGORA" \
+            2 "Listar Backups BD" \
+            3 "Restaurar Backup BD" \
+            4 "Apagar Backup BD" \
+            2>"$TEMP_FILE"
+
+        if [[ $? -ne 0 ]]; then
+            return
+        fi
+
+        escolha_db=$(cat "$TEMP_FILE")
+
+        case $escolha_db in
+            1) fazer_backup_db ;;
+            2) listar_backups_db ;;
+            3) restaurar_backup_db ;;
+            4) apagar_backup_db ;;
+        esac
+    done
+}
+
+
+# ============================================================
 #  MENU PRINCIPAL
 # ============================================================
 
 while true; do
     dialog --title " ATEC // GESTOR DE BACKUPS v2.0 " \
         --cancel-label "Sair" \
-        --menu "\n  BackupServer -> WebServer (${WEBSERVER_IP})\n" 21 62 11 \
+        --menu "\n  BackupServer -> WebServer (${WEBSERVER_IP})\n" 23 62 13 \
         1  "Ver Estado do Sistema" \
         2  "Fazer Backup AGORA" \
         3  "Listar Backups Disponiveis" \
@@ -787,7 +1016,8 @@ while true; do
         8  "Ver Logs" \
         9  "Estado do RAID 10" \
         10 "Agendamentos" \
-        11 "Reconfigurar" \
+        11 "Backups Base de Dados (MariaDB)" \
+        12 "Reconfigurar" \
         2>"$TEMP_FILE"
 
     if [[ $? -ne 0 ]]; then
@@ -810,12 +1040,14 @@ while true; do
         8)  ver_logs ;;
         9)  estado_raid ;;
         10) menu_agendamentos ;;
-        11) dialog --title " Reconfigurar " --editbox "$CONF_FILE" 12 55 2>"$TEMP_FILE"
+        11) menu_backups_db ;;
+        12) dialog --title " Reconfigurar " --editbox "$CONF_FILE" 12 55 2>"$TEMP_FILE"
             if [[ $? -eq 0 ]]; then
                 cp "$TEMP_FILE" "$CONF_FILE"
                 source "$CONF_FILE"
                 BACKUP_WEB="${BACKUP_BASE}/web/incremental"
                 BACKUP_CURRENT="${BACKUP_WEB}/current"
+                BACKUP_DB="${BACKUP_BASE}/db/incremental"
                 LOG_DIR="${BACKUP_BASE}/logs"
                 dialog --title " OK " --msgbox "\nConfiguracao atualizada!" 7 35
             fi ;;
