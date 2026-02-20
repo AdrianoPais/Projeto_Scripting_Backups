@@ -1,8 +1,6 @@
-# 🚀 Projeto Scripting & Backups - ATEC 2026
+# Projeto Scripting & Backups - ATEC 2026
 
-![ATEC Logo](https://github.com/user-attachments/assets/c7009993-50b2-4bdb-babf-bc21a35a6008)
-
-## 📋 Índice
+## Índice
 
 - [Sobre o Projeto](#sobre-o-projeto)
 - [Características](#características)
@@ -15,7 +13,7 @@
 
 ---
 
-## 📖 Sobre o Projeto
+## Sobre o Projeto
 
 Sistema completo de **Backup Automático** e **Servidor Web** desenvolvido para o projeto de scripting da ATEC 2026. O projeto implementa:
 
@@ -30,9 +28,9 @@ Sistema completo de **Backup Automático** e **Servidor Web** desenvolvido para 
 
 ---
 
-## ✨ Características
+## Características
 
-### 🌐 WebServer
+### WebServer
 
 - **Apache HTTP Server** otimizado
 - **HTTPS** com certificados SSL (Let's Encrypt)
@@ -40,7 +38,7 @@ Sistema completo de **Backup Automático** e **Servidor Web** desenvolvido para 
 - **ModSecurity** (Web Application Firewall)
 - **Performance Tuning** automático
 
-### 💾 BackupServer
+### BackupServer
 
 - **RAID 10** para redundância
 - **Backups incrementais** com rsync
@@ -49,7 +47,7 @@ Sistema completo de **Backup Automático** e **Servidor Web** desenvolvido para 
 - **Gestão de versões** (rotação de backups antigos)
 - **Agendamento personalizável**
 
-### 🔒 Segurança
+### Segurança
 
 - **Fail2Ban** - Proteção contra brute-force
 - **ModSecurity** - Web Application Firewall
@@ -57,7 +55,7 @@ Sistema completo de **Backup Automático** e **Servidor Web** desenvolvido para 
 - **SELinux** suportado
 - **SSH** com autenticação por chave
 
-### 🎨 Interface
+### Interface
 
 - **Gestor Dialog** - Interface gráfica em texto
 - **Gestor Retro** - Visual cyberpunk/neon
@@ -66,7 +64,7 @@ Sistema completo de **Backup Automático** e **Servidor Web** desenvolvido para 
 
 ---
 
-## 📦 Requisitos
+## Requisitos
 
 ### Hardware Mínimo
 
@@ -88,9 +86,9 @@ Sistema completo de **Backup Automático** e **Servidor Web** desenvolvido para 
 
 ---
 
-## 🚀 Instalação Rápida
+## Instalação Rápida
 
-### 1️⃣ WebServer
+### WebServer
 
 ```bash
 # Download dos scripts
@@ -104,7 +102,7 @@ sudo bash Script_WebServer_Final.sh
 bash Script_SSL.sh
 ```
 
-### 2️⃣ BackupServer
+### BackupServer
 
 ```bash
 # Executar instalação do BackupServer
@@ -114,7 +112,7 @@ sudo bash Script_BackupServer_INSTALACAO.sh
 sudo bash /usr/local/sbin/backup-gestor.sh
 ```
 
-### 3️⃣ Segurança e Otimizações (Opcional)
+### Segurança e Otimizações (Opcional)
 
 ```bash
 # Backup de bases de dados
@@ -132,16 +130,16 @@ sudo bash Script_Performance.sh
 
 ---
 
-## 📜 Scripts Disponíveis
+## Scripts Disponíveis
 
-### 🌐 WebServer
+### WebServer
 
 | Script | Descrição |
 |--------|-----------|
 | `Script_WebServer_Final.sh` | Instalação completa do WebServer (Apache + PHP + MySQL) |
 | `Script_SSL.sh` | Configuração HTTPS com Let's Encrypt via DuckDNS |
 
-### 💾 BackupServer
+### BackupServer
 
 | Script | Descrição |
 |--------|-----------|
@@ -150,7 +148,7 @@ sudo bash Script_Performance.sh
 | `Script_BackupServer_GESTOR_RETRO.sh` | Gestor visual retro-futurista |
 | `Script_BackupServer_GESTOR_v3.sh` | Gestor v3 com agendamentos |
 
-### 🗄️ Bases de Dados
+### Bases de Dados
 
 | Script | Descrição |
 |--------|-----------|
@@ -158,7 +156,7 @@ sudo bash Script_Performance.sh
 | `/usr/local/sbin/backup-db.sh` | Script de backup automático (criado após instalação) |
 | `/usr/local/sbin/restore-db.sh` | Script de restauro (criado após instalação) |
 
-### 🔒 Segurança
+### Segurança
 
 | Script | Descrição |
 |--------|-----------|
@@ -167,7 +165,7 @@ sudo bash Script_Performance.sh
 | `/usr/local/sbin/fail2ban-manager.sh` | Gestor interativo Fail2Ban |
 | `/usr/local/sbin/modsec-manager.sh` | Gestor interativo ModSecurity |
 
-### ⚡ Performance
+### Performance
 
 | Script | Descrição |
 |--------|-----------|
@@ -175,7 +173,7 @@ sudo bash Script_Performance.sh
 | `/usr/local/sbin/benchmark.sh` | Teste de performance |
 | `/usr/local/sbin/monitor.sh` | Monitorização em tempo real |
 
-### 🔧 Diagnóstico
+### Diagnóstico
 
 | Script | Descrição |
 |--------|-----------|
@@ -187,9 +185,9 @@ sudo bash Script_Performance.sh
 
 ---
 
-## 📖 Documentação Detalhada
+## Documentação Detalhada
 
-### 🌐 WebServer - Instalação
+### WebServer - Instalação
 
 O `Script_WebServer_Final.sh` configura automaticamente:
 
@@ -217,7 +215,7 @@ sudo httpd -t
 sudo systemctl restart httpd
 ```
 
-### 🔐 HTTPS com DuckDNS
+### HTTPS com DuckDNS
 
 O `Script_SSL.sh` configura HTTPS automaticamente:
 
@@ -240,7 +238,7 @@ O `Script_SSL.sh` configura HTTPS automaticamente:
 ~/.acme.sh/acme.sh --renew -d seu-dominio.duckdns.org --force
 ```
 
-### 💾 BackupServer - Estrutura
+### BackupServer - Estrutura
 
 **Diretórios criados:**
 
@@ -280,7 +278,7 @@ sudo mdadm --add /dev/md0 /dev/sdX
 sudo mdadm --stop /dev/md0
 ```
 
-### 📊 Gestor de Backups
+### Gestor de Backups
 
 **Opções disponíveis:**
 
@@ -302,7 +300,7 @@ sudo mdadm --stop /dev/md0
 - **Periódico**: A cada X horas (1, 2, 3, 4, 6, 12h)
 - **Mensal**: Dia específico do mês
 
-### 🗄️ Backup de Bases de Dados
+### Backup de Bases de Dados
 
 O `Script_BackupDB.sh` configura:
 
@@ -328,7 +326,7 @@ ls -lh /backup/db/
 mysqldump -h IP -u user -p --all-databases --dry-run
 ```
 
-### 🛡️ Fail2Ban
+### Fail2Ban
 
 Protege contra ataques de força bruta:
 
@@ -359,7 +357,7 @@ sudo fail2ban-client set sshd banip 192.168.1.100
 sudo journalctl -u fail2ban -f
 ```
 
-### 🔥 ModSecurity (WAF)
+### ModSecurity (WAF)
 
 Web Application Firewall que bloqueia:
 
@@ -397,7 +395,7 @@ sudo sed -i 's/SecRuleEngine .*/SecRuleEngine On/' /etc/httpd/conf.d/mod_securit
 sudo systemctl restart httpd
 ```
 
-### ⚡ Performance Tuning
+### Performance Tuning
 
 Otimiza automaticamente baseado nos recursos:
 
@@ -447,7 +445,7 @@ mysql -e "SHOW STATUS;"
 
 ---
 
-## 🔧 Troubleshooting
+## Troubleshooting
 
 ### Problema: Erro rsync código 12
 
@@ -584,7 +582,7 @@ sudo systemctl restart httpd
 
 ---
 
-## 📁 Estrutura do Projeto
+## Estrutura do Projeto
 
 ```
 projeto-backup-atec/
@@ -612,9 +610,9 @@ projeto-backup-atec/
 
 ---
 
-## 🎯 Checklist de Requisitos
+## Checklist de Requisitos
 
-### ✅ Requisitos Implementados
+### Requisitos Implementados
 
 - [x] **RAID 10** - 4 discos configurados automaticamente
 - [x] **IP Público/Rede** - Configuração automática + DuckDNS
@@ -633,7 +631,7 @@ projeto-backup-atec/
 
 ---
 
-## 👥 Contribuir
+## Contribuir
 
 Este é um projeto académico da ATEC 2026. Contribuições são bem-vindas!
 
@@ -647,13 +645,13 @@ Este é um projeto académico da ATEC 2026. Contribuições são bem-vindas!
 
 ---
 
-## 📝 Licença
+## Licença
 
 Este projeto é desenvolvido para fins educacionais na ATEC 2026.
 
 ---
 
-## 📞 Suporte
+## Suporte
 
 **Problemas comuns:**
 - Ver secção [Troubleshooting](#troubleshooting)
@@ -669,7 +667,7 @@ Este projeto é desenvolvido para fins educacionais na ATEC 2026.
 
 ---
 
-## 🙏 Agradecimentos
+## Agradecimentos
 
 - **ATEC** - Academia de Formação
 - **Rocky Linux / AlmaLinux** - Sistema operativo
